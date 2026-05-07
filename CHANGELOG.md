@@ -1,6 +1,18 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
+## v3.0.4 - The ReSukiSU Improvement (May.1 2026)
+Name: ReSukiSU-NP2-Pong.zip
+Linux 5.10.246 · Android 13 GKI
+
+### New
+- Fully support KPM
+- Made the workflow be able to build any GKI-based kernel, feel free to fork it for your own device/kernel.
+- Added BaseBandGuard support, allowing to have root while preventing apps and modules touch critical files (Think it like an AppArmor for android).
+
+### Fixed
+- Root detection on some banking apps (e.g. Revolut) due to some manual hooks and configs.
+
 ## v3.0.3 - The ReSukiSU move (April.2 2026)
 
 #### LineageOS Kernel
