@@ -128,15 +128,16 @@ jobs:
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
         run: |
-          if [ ! -d "${{ inputs.extra_patches_dir }}" ]; then
-            echo "Extra patches dir not found: ${{ inputs.extra_patches_dir }}" >&2
+          patch_dir="$GITHUB_WORKSPACE/${{ inputs.extra_patches_dir }}"
+          if [ ! -d "$patch_dir" ]; then
+            echo "Extra patches dir not found: $patch_dir" >&2
             exit 1
           fi
           cd "$KERNEL_DIR"
           while IFS= read -r -d '' patch; do
             echo "Applying $patch"
-            patch -p1 < "../$patch"
-          done < <(find "${{ inputs.extra_patches_dir }}" -maxdepth 1 -type f \( -name '*.patch' -o -name '*.diff' \) -print0 | sort -z)
+            patch -p1 < "$patch"
+          done < <(find "$patch_dir" -maxdepth 1 -type f \( -name '*.patch' -o -name '*.diff' \) -print0 | sort -z)
 
       - name: Apply SUSFS patches
         if: ${{ inputs.susfs_support == true }}
