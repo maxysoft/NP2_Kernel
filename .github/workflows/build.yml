@@ -136,14 +136,7 @@ jobs:
           cd "$KERNEL_DIR"
           while IFS= read -r -d '' patch; do
             echo "Applying $patch"
-            if patch -p1 -N --dry-run < "$patch" >/dev/null 2>&1; then
-              patch -p1 -N < "$patch"
-            elif patch -p1 -R --dry-run < "$patch" >/dev/null 2>&1; then
-              echo "Already applied: $patch"
-            else
-              echo "Failed to apply: $patch" >&2
-              exit 1
-            fi
+            patch -p1 < "$patch"
           done < <(find "$patch_dir" -maxdepth 1 -type f \( -name '*.patch' -o -name '*.diff' \) -print0 | sort -z)
 
       - name: Apply SUSFS patches
@@ -152,7 +145,7 @@ jobs:
           cd "$KERNEL_DIR"
           cp ../susfs4ksu/kernel_patches/fs/* ./fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
-          patch -p1 < ../susfs4ksu/kernel_patches/50_add_susfs_in_${{ inputs.susfs_branch || 'gki-android13-5.10' }}.patch
+          patch -p1 -N < ../susfs4ksu/kernel_patches/50_add_susfs_in_${{ inputs.susfs_branch || 'gki-android13-5.10' }}.patch
 
       - name: Apply BBG patches
         if: ${{ inputs.bbg_support == true }}
