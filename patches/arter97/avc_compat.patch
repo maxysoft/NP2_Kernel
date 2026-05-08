@@ -1,6 +1,6 @@
 --- a/security/selinux/avc.c
 +++ b/security/selinux/avc.c
-@@ -700,28 +700,30 @@
+@@ -700,28 +700,29 @@
  {
  	struct common_audit_data *ad = a;
  	struct selinux_audit_data *sad = ad->selinux_audit_data;
@@ -10,6 +10,7 @@
 +	char *scontext, *tcontext;
 +	u32 scontext_len, tcontext_len;
  	int rc;
++	const char *tclass;
  
  	trace_selinux_audited(sad);
  
@@ -30,8 +31,6 @@
  	else
 -		audit_log_format(ab, " tcontext=%s", scontext);
 +		audit_log_format(ab, " tcontext=%s", tcontext);
-+
-+	const char *tclass;
  
 -	audit_log_format(ab, " tclass=%s", secclass_map[sad->tclass-1].name);
 +	tclass = secclass_map[sad->tclass-1].name;
