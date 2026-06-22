@@ -243,6 +243,20 @@ jobs:
           path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-ReSukiSU.zip"
           retention-days: 30
 
+      - name: Create GitHub Release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ inputs.kernel_type || 'LineageOS' }}-${{ github.run_number }}"
+          name: "NP2 Kernel – ${{ inputs.kernel_type || 'LineageOS' }} #${{ github.run_number }}"
+          body: |
+            **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
+            **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
+            **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}
+          files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-ReSukiSU.zip"
+          draft: false
+          prerelease: false
+
       - name: Upload .config for debugging
         if: always()
         uses: actions/upload-artifact@v4
