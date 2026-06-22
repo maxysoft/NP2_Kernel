@@ -174,7 +174,8 @@ jobs:
         run: |
           cd "$KERNEL_DIR"
           curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s v4.1.0
-          git -C KernelSU branch miuix origin/miuix 2>/dev/null || true
+          git -C KernelSU fetch origin miuix:miuix 2>/dev/null || \
+            git -C KernelSU branch miuix HEAD 2>/dev/null || true
 
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
