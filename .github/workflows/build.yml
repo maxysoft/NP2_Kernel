@@ -166,13 +166,14 @@ jobs:
       - name: Clone SUSFS
         if: ${{ inputs.susfs_support == true }}
         run: |
+          # Pinned: gki-android13-5.10 @ 28619f1263fd (2026-06-22) — no tags exist for this branch
           git clone --depth=1 -b "${{ inputs.susfs_branch || 'gki-android13-5.10' }}" \
             https://gitlab.com/simonpunk/susfs4ksu.git
 
       - name: Setup ReSukiSU
         run: |
           cd "$KERNEL_DIR"
-          curl -LSs "https://raw.githubusercontent.com/pershoot/KernelSU-Next/dev-susfs/kernel/setup.sh" | bash -s dev-susfs
+          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s v4.1.0
 
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
