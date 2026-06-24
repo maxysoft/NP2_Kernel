@@ -123,6 +123,7 @@ jobs:
       CCACHE_DIR: ~/.ccache
       CCACHE_MAXSIZE: 2G
       CCACHE_SLOPPINESS: time_macros,include_file_mtime
+      CCACHE_PATH: /usr/bin
       MAKE_ARGS: >-
         ARCH=arm64
         CROSS_COMPILE=aarch64-linux-gnu-
@@ -161,6 +162,7 @@ jobs:
             printf '#!/bin/sh\nexec ccache %s "$@"\n' "$tool" > ~/.local/ccache-shims/$tool
             chmod +x ~/.local/ccache-shims/$tool
           done
+          cp ~/.local/ccache-shims/clang ~/.local/ccache-shims/clang-18
           echo "$HOME/.local/ccache-shims" >> "$GITHUB_PATH"
 
       - name: Setup LLVM toolchain path (arter97 compat)
@@ -191,7 +193,7 @@ jobs:
           git clone --depth=1 -b "${{ inputs.susfs_branch || 'gki-android13-5.10' }}" \
             https://gitlab.com/simonpunk/susfs4ksu.git
 
-      - name: Setup ReSukiSU
+      - name: Setup SukiSU-Ultra
         run: |
           cd "$KERNEL_DIR"
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s v4.1.3
@@ -263,8 +265,8 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-ReSukiSU
-          path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-ReSukiSU.zip"
+          name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra
+          path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra.zip"
           retention-days: 30
 
       - name: Create GitHub Release
@@ -277,7 +279,7 @@ jobs:
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
             **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}
-          files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-ReSukiSU.zip"
+          files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra.zip"
           draft: false
           prerelease: false
 
@@ -285,7 +287,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: config-NP2-ReSukiSU
+          name: config-NP2-SukiSU-Ultra
           path: kernel/out/.config
           retention-days: 1
 
@@ -308,5 +310,5 @@ jobs:
         if: always() && steps.collect_rej.outputs.found == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: rej-NP2-ReSukiSU
+          name: rej-NP2-SukiSU-Ultra
           path: rej/

@@ -6,7 +6,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 
 ## §V — Invariants
 
-**V1** — Every build must produce `kernel-<type>-NP2-ReSukiSU.zip` containing a valid arm64 `Image`.
+**V1** — Every build must produce `kernel-<type>-NP2-SukiSU-Ultra.zip` containing a valid arm64 `Image`.
 
 **V2** — `CONFIG_KSU=y` must always be set. Root is the core feature; a build without it is broken.
 
@@ -27,7 +27,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 ### I.workflow-inputs — `build.yml` workflow_dispatch inputs
 
 | Input | Default | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `kernel_repo` | LineageOS sm8475 repo | Override for NothingOSS, arter97, etc. |
 | `kernel_branch` | `lineage-23.2` | Must be a valid branch in the repo |
 | `kernel_defconfig` | `gki_defconfig` | Space-separated; prefix `/` for kernel-root paths |
@@ -42,7 +42,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 
 ### I.zip-name — output artifact
 
-`kernel-<kernel_type>-NP2-ReSukiSU.zip`
+`kernel-<kernel_type>-NP2-SukiSU-Ultra.zip`
 
 ### I.release-tag — GitHub Release tag format
 
@@ -51,7 +51,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 ### I.scripts
 
 | Script | Role |
-|---|---|
+| --- | --- |
 | `Scripts/build_kernel.sh` | Applies defconfig + extra configs, builds `Image`, applies KPM patch |
 | `Scripts/package_anykernel.sh` | Packages `Image` into AnyKernel3 zip |
 | `Scripts/anykernel.sh` | AnyKernel3 config — device check, block device, compression |
@@ -60,15 +60,17 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 
 **P1** — Build jobs must use all available cores: `JOBS=$(nproc)`.
 
-**P2** — ccache must be configured with `actions/cache@v4` to persist across runs. Cache key must include `runner.os`, `kernel_type`, and a hash of `build_kernel.sh`.
+**P2** — ccache must be configured with `actions/cache@v6` to persist across runs. Cache key must include `runner.os`, `kernel_type`, and a hash of `build_kernel.sh`.
 
 **P3** — Extra kernel configs injected at build time (in `ci-extra.config`):
+
 - `CONFIG_TCP_CONG_BBR=y` + `CONFIG_DEFAULT_TCP_CONG="bbr"` — better mobile TCP
 - `CONFIG_ZRAM_DEF_COMP_ZSTD=y` — better ZRAM compression
 - `CONFIG_BPF_JIT=y` + `CONFIG_BPF_JIT_ALWAYS_ON=y` — eBPF performance
 - `CONFIG_FUTEX=y` + `CONFIG_FUTEX_PI=y` — required by Android, ensures enabled
 
 **P4** — The following configs are intentionally NOT added:
+
 - `CONFIG_SECURITY_LOCKDOWN_LSM` — conflicts with KPM KPROBES at runtime
 - `CONFIG_INIT_ON_ALLOC_DEFAULT_ON` — already in GKI base; if not, ~1% overhead acceptable but redundant
 - `CONFIG_HZ_300` — GKI 5.10 mandates this; adding it is harmless but redundant

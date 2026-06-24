@@ -3,7 +3,7 @@
 
 ## AnyKernel setup
 properties() { '
-kernel.string=NP2 Kernel - ReSukiSU
+kernel.string=NP2 Kernel - SukiSU-Ultra
 do.devicecheck=1
 do.modules=0
 do.systemless=1
