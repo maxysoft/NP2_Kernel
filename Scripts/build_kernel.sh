@@ -84,12 +84,26 @@ if [ "${BBG_SUPPORT}" = "true" ]; then
   echo "CONFIG_BBG=y" >> "${EXTRA_CFG}"
 fi
 
+# TCP BBR congestion control
+echo "CONFIG_TCP_CONG_BBR=y" >> "${EXTRA_CFG}"
+echo 'CONFIG_DEFAULT_TCP_CONG="bbr"' >> "${EXTRA_CFG}"
+
+# ZRAM default compressor (takes effect on arter97; silent no-op on GKI ACK 5.10 targets)
+echo "CONFIG_ZRAM_DEF_COMP_ZSTD=y" >> "${EXTRA_CFG}"
+
+# BPF JIT (idempotent on GKI base; hardens against interpreter-side-channel attacks)
+echo "CONFIG_BPF_JIT=y" >> "${EXTRA_CFG}"
+echo "CONFIG_BPF_JIT_ALWAYS_ON=y" >> "${EXTRA_CFG}"
+
+# Futex + priority inheritance (mandated by GKI android-base.cfg; explicit for clarity)
+echo "CONFIG_FUTEX=y" >> "${EXTRA_CFG}"
+echo "CONFIG_FUTEX_PI=y" >> "${EXTRA_CFG}"
+
 cat "${EXTRA_CFG}" >> out/.config
 make ${MAKE_ARGS} olddefconfig
 [ -f scripts/setlocalversion ] && sed -i 's/-dirty//g' scripts/setlocalversion || true
 
-JOBS=$(( $(nproc) / 2 ))
-[ "${JOBS}" -lt 1 ] && JOBS=1
+JOBS=$(nproc)
 make -j"${JOBS}" ${MAKE_ARGS} Image KCFLAGS="-Wno-error"
 
 if [ "${KPM_SUPPORT}" = "true" ]; then

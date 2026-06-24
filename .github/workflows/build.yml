@@ -120,6 +120,9 @@ jobs:
       ANYKERNEL_DIR: AnyKernel3
       DEFCONFIG: ${{ inputs.kernel_defconfig }}
       DEFCONFIG_FRAGS: ${{ inputs.extra_configs }}
+      CCACHE_DIR: ~/.ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_SLOPPINESS: time_macros,include_file_mtime
       MAKE_ARGS: >-
         ARCH=arm64
         CROSS_COMPILE=aarch64-linux-gnu-
@@ -132,7 +135,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -141,6 +144,24 @@ jobs:
             build-essential bc bison flex libelf-dev libssl-dev ccache \
             lz4 zip python3 clang llvm lld gcc-aarch64-linux-gnu \
             gcc-arm-linux-gnueabi wget
+
+      - name: Setup ccache
+        uses: actions/cache@v6
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ inputs.kernel_type || 'LineageOS' }}-${{ hashFiles('Scripts/build_kernel.sh') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ inputs.kernel_type || 'LineageOS' }}-
+            ccache-${{ runner.os }}-
+
+      - name: Wire ccache shims into PATH
+        run: |
+          mkdir -p ~/.local/ccache-shims
+          for tool in clang clang++; do
+            printf '#!/bin/sh\nexec ccache %s "$@"\n' "$tool" > ~/.local/ccache-shims/$tool
+            chmod +x ~/.local/ccache-shims/$tool
+          done
+          echo "$HOME/.local/ccache-shims" >> "$GITHUB_PATH"
 
       - name: Setup LLVM toolchain path (arter97 compat)
         if: ${{ contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
@@ -240,7 +261,7 @@ jobs:
           KERNEL_TYPE="${{ inputs.kernel_type || 'LineageOS' }}" Scripts/package_anykernel.sh
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-ReSukiSU
           path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-ReSukiSU.zip"
@@ -248,7 +269,7 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: "${{ inputs.kernel_type || 'LineageOS' }}-${{ github.run_number }}"
           name: "NP2 Kernel – ${{ inputs.kernel_type || 'LineageOS' }} #${{ github.run_number }}"
@@ -262,7 +283,7 @@ jobs:
 
       - name: Upload .config for debugging
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: config-NP2-ReSukiSU
           path: kernel/out/.config
@@ -285,7 +306,7 @@ jobs:
 
       - name: Upload .rej files
         if: always() && steps.collect_rej.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rej-NP2-ReSukiSU
           path: rej/
