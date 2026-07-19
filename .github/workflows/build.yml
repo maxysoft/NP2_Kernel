@@ -129,7 +129,8 @@ jobs:
       ANYKERNEL_DIR: AnyKernel3
       DEFCONFIG: ${{ inputs.kernel_defconfig }}
       DEFCONFIG_FRAGS: ${{ inputs.extra_configs }}
-      CCACHE_DIR: ~/.ccache
+      # CCACHE_DIR is set in the "Configure ccache" step to an absolute path;
+      # a literal ~ in this env block is NOT expanded and breaks the cache.
       CCACHE_MAXSIZE: 2G
       CCACHE_SLOPPINESS: time_macros,include_file_mtime
       CCACHE_PATH: /usr/bin
@@ -147,6 +148,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v7
 
+      - name: Set build date
+        run: echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+      - name: Configure ccache
+        run: |
+          mkdir -p "$HOME/.ccache"
+          echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -158,7 +167,7 @@ jobs:
       - name: Setup ccache
         uses: actions/cache@v6
         with:
-          path: ~/.ccache
+          path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ runner.os }}-${{ inputs.kernel_type || 'LineageOS' }}-${{ hashFiles('Scripts/build_kernel.sh') }}
           restore-keys: |
             ccache-${{ runner.os }}-${{ inputs.kernel_type || 'LineageOS' }}-
@@ -285,6 +294,10 @@ jobs:
           DROIDSPACES_SUPPORT="${{ inputs.droidspaces_support }}" \
           Scripts/build_kernel.sh
 
+      - name: ccache stats
+        if: always()
+        run: ccache -s || true
+
       - name: Package AnyKernel3
         run: |
           KERNEL_TYPE="${{ inputs.kernel_type || 'LineageOS' }}" Scripts/package_anykernel.sh
@@ -305,6 +318,7 @@ jobs:
           body: |
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
+            **Build date:** ${{ env.BUILD_DATE }}
             **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}
           files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra.zip"
           draft: false
