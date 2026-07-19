@@ -149,7 +149,8 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set build date
-        run: echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+        # Colon-free ISO 8601 (UTC) — colons are invalid in filenames on FAT/exFAT/NTFS
+        run: echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H-%M-%SZ')" >> "$GITHUB_ENV"
 
       - name: Configure ccache
         run: |
@@ -300,13 +301,15 @@ jobs:
 
       - name: Package AnyKernel3
         run: |
-          KERNEL_TYPE="${{ inputs.kernel_type || 'LineageOS' }}" Scripts/package_anykernel.sh
+          KERNEL_TYPE="${{ inputs.kernel_type || 'LineageOS' }}" \
+          BUILD_DATE="${{ env.BUILD_DATE }}" \
+          Scripts/package_anykernel.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra
-          path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra.zip"
+          name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}
+          path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
           retention-days: 30
 
       - name: Create GitHub Release
@@ -318,9 +321,8 @@ jobs:
           body: |
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
-            **Build date:** ${{ env.BUILD_DATE }}
             **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}
-          files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra.zip"
+          files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
           draft: false
           prerelease: false
 

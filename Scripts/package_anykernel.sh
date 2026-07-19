@@ -13,5 +13,6 @@ cp Scripts/anykernel.sh "${ANYKERNEL_DIR}/anykernel.sh"
 
 cd "${ANYKERNEL_DIR}"
 KERNEL_TYPE="${KERNEL_TYPE:-LineageOS}"
-ZIP_NAME="kernel-${KERNEL_TYPE}-NP2-SukiSU-Ultra.zip"
+# Append colon-free ISO build date when provided (CI); local builds stay dateless
+ZIP_NAME="kernel-${KERNEL_TYPE}-NP2-SukiSU-Ultra${BUILD_DATE:+-${BUILD_DATE}}.zip"
 zip -r9 "../${ZIP_NAME}" ./*
