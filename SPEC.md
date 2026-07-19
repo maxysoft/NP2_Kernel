@@ -37,6 +37,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 | `susfs_branch` | `gki-android13-5.10` | Must match patch filename in susfs4ksu repo |
 | `bbg_support` | `true` | Applies BaseBandGuard setup script |
 | `susfs_force` | `false` | Set `true` to ignore SUSFS patch failures |
+| `droidspaces_support` | `false` | Applies `patches/droidspaces` kABI fixes + container configs |
 | `kernel_type` | `LineageOS` | Used in zip name and release tag |
 | `extra_patches_dir` | `` | Repo-local dir of `.patch`/`.diff` files |
 
@@ -77,6 +78,20 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 - `CONFIG_ENERGY_MODEL` — already enabled in waipio BSP; redundant
 - `CONFIG_WIREGUARD` — already in GKI 5.10 as module; redundant
 
+## §D — Droidspaces-OSS (optional, `droidspaces_support`)
+
+**D1** — Enabling GKI container support (`CONFIG_SYSVIPC`, `CONFIG_IPC_NS`, …) shifts `task_struct`/`user_struct` offsets and bootloops vendor modules. The `patches/droidspaces` kABI fixes are MANDATORY whenever `droidspaces_support=true` — configs alone will brick the device.
+
+**D2** — SYSVIPC kABI variant is `6_7_8`. Verified against LineageOS sm8475 `task_struct`: slot 1 is used by `pf_io_worker`, slots 2–8 free. Variant `1_2_3` would collide on slot 1 and bootloop; `3_4_5` and `6_7_8` both fit. If a future kernel rev consumes slots 6–8, re-verify and swap to `3_4_5`.
+
+**D3** — POSIX_MQUEUE padding patch (`002-posix-mqueue-abi-padding.patch`) is required for kernels ≤ 5.10, applied alongside the SYSVIPC patch.
+
+**D4** — SUSFS and SukiSU do not modify `include/linux/sched.h` or `sched/user.h`, so Droidspaces patches are order-independent with the rest of the stack.
+
+**D5** — Kernel support is only half of Droidspaces. The userspace side (app + SELinux `.cil` policy + init service) is out of scope for this workflow and must be installed separately.
+
+**D6** — Boot cannot be verified in CI. A green build only proves patches applied and configs compiled — device flashing confirms no bootloop.
+
 ## §T — Task History
 
 - [x] T1: Add GitHub Release step to `build.yml` (workflow_dispatch only, softprops/action-gh-release@v2)
@@ -90,3 +105,4 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 - [ ] T9: Update `build-all.yml` NothingOSS build — consider switching to SukiSU-Ultra setup.sh too
 - [x] T10: Fix flash failure — migrate `anykernel.sh` to modern AK3 variables (`BLOCK`/`IS_SLOT_DEVICE`/`RAMDISK_COMPRESSION`/`PATCH_VBMETA_FLAG`); legacy lowercase names dropped by AnyKernel3 master, which the workflow clones fresh each build
 - [x] T11: Keep KPM (upstream MiguVT dropped it because ReSukiSU dropped it — we're on SukiSU-Ultra which supports it); pin `SukiSU_KernelPatch_patch` to 0.13.0 instead of `latest`
+- [x] T12: Add optional Droidspaces-OSS support behind `droidspaces_support` flag (default off) — vendored `6_7_8` SYSVIPC + POSIX_MQUEUE kABI patches, container config block, dedicated apply step. See §D.

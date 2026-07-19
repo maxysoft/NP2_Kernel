@@ -84,6 +84,30 @@ if [ "${BBG_SUPPORT}" = "true" ]; then
   echo "CONFIG_BBG=y" >> "${EXTRA_CFG}"
 fi
 
+if [ "${DROIDSPACES_SUPPORT:-false}" = "true" ]; then
+  # Droidspaces-OSS GKI support. kABI-safe only when paired with the
+  # patches/droidspaces kABI fixes applied in the workflow.
+  echo "CONFIG_SYSVIPC=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_POSIX_MQUEUE=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_IPC_NS=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_PID_NS=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_DEVTMPFS=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> "${EXTRA_CFG}"
+  # Docker unsafe-procfs fix
+  echo "CONFIG_USER_NS=y" >> "${EXTRA_CFG}"
+  # UFW support
+  echo "CONFIG_NETFILTER_XT_TARGET_REJECT=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_NETFILTER_XT_TARGET_LOG=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_NETFILTER_XT_MATCH_RECENT=y" >> "${EXTRA_CFG}"
+  # Fail2ban support
+  echo "CONFIG_IP_SET=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_IP_SET_HASH_IP=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_IP_SET_HASH_NET=y" >> "${EXTRA_CFG}"
+  echo "CONFIG_NETFILTER_XT_SET=y" >> "${EXTRA_CFG}"
+  # xattr + posix acl on tmpfs (NixOS support)
+  echo "CONFIG_TMPFS_POSIX_ACL=y" >> "${EXTRA_CFG}"
+fi
+
 # TCP BBR congestion control
 echo "CONFIG_TCP_CONG_BBR=y" >> "${EXTRA_CFG}"
 echo 'CONFIG_DEFAULT_TCP_CONG="bbr"' >> "${EXTRA_CFG}"

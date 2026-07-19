@@ -57,6 +57,11 @@ on:
         required: false
         type: boolean
         default: false
+      droidspaces_support:
+        description: 'Enable Droidspaces-OSS support (GKI 5.10 kABI patches + container configs)'
+        required: false
+        type: boolean
+        default: false
       kernel_type:
         description: 'Kernel type identifier (arter97, NothingOSS, LineageOS)'
         required: false
@@ -103,6 +108,10 @@ on:
         type: boolean
         default: false
       susfs_force:
+        required: false
+        type: boolean
+        default: false
+      droidspaces_support:
         required: false
         type: boolean
         default: false
@@ -234,6 +243,23 @@ jobs:
           wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
 
+      - name: Apply Droidspaces patches
+        if: ${{ inputs.droidspaces_support == true }}
+        run: |
+          # GKI 5.10 kABI fix: SYSVIPC variant 6_7_8 (task_struct reserved slots 6-8 are
+          # free on LineageOS sm8475; slot 1 is used by pf_io_worker so 1_2_3 would bootloop)
+          # plus the POSIX_MQUEUE padding fix mandatory for kernels <= 5.10.
+          patch_dir="$GITHUB_WORKSPACE/patches/droidspaces"
+          if [ ! -d "$patch_dir" ]; then
+            echo "Droidspaces patches dir not found: $patch_dir" >&2
+            exit 1
+          fi
+          cd "$KERNEL_DIR"
+          while IFS= read -r -d '' patch; do
+            echo "Applying $patch"
+            patch -p1 < "$patch"
+          done < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' -print0 | sort -z)
+
       - name: Prepare build scripts
         run: |
           chmod +x Scripts/build_kernel.sh
@@ -256,6 +282,7 @@ jobs:
           SUSFS_SUPPORT="${{ inputs.susfs_support }}" \
           KPM_SUPPORT="${{ inputs.kpm_support }}" \
           BBG_SUPPORT="${{ inputs.bbg_support }}" \
+          DROIDSPACES_SUPPORT="${{ inputs.droidspaces_support }}" \
           Scripts/build_kernel.sh
 
       - name: Package AnyKernel3
@@ -278,7 +305,7 @@ jobs:
           body: |
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
-            **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}
+            **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}
           files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra.zip"
           draft: false
           prerelease: false
