@@ -86,5 +86,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 - [x] T5: Add ccache caching with `actions/cache@v4`
 - [x] T6: Add performance kernel configs (BBR, ZRAM-zstd, BPF-JIT, FUTEX)
 - [x] T7: Remove duplicate `kernel.string` line from `anykernel.sh`
-- [ ] T8: Update README credits — replace ReSukiSU with SukiSU-Ultra references
+- [x] T8: Rewrite README — links point to maxysoft fork, upstream MiguVT credited, ReSukiSU → SukiSU-Ultra, stale sections removed
 - [ ] T9: Update `build-all.yml` NothingOSS build — consider switching to SukiSU-Ultra setup.sh too
+- [x] T10: Fix flash failure — migrate `anykernel.sh` to modern AK3 variables (`BLOCK`/`IS_SLOT_DEVICE`/`RAMDISK_COMPRESSION`/`PATCH_VBMETA_FLAG`); legacy lowercase names dropped by AnyKernel3 master, which the workflow clones fresh each build
+- [x] T11: Keep KPM (upstream MiguVT dropped it because ReSukiSU dropped it — we're on SukiSU-Ultra which supports it); pin `SukiSU_KernelPatch_patch` to 0.13.0 instead of `latest`

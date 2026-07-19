@@ -113,7 +113,8 @@ import json
 import sys
 import urllib.request
 
-url = "https://api.github.com/repos/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/latest"
+# Pinned: 0.13.0 (2026-01-30) — avoid silent breakage from unvetted patcher updates
+url = "https://api.github.com/repos/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/tags/0.13.0"
 with urllib.request.urlopen(url) as resp:
   data = json.load(resp)
 
