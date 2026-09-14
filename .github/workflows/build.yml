@@ -146,7 +146,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set build date
         # Colon-free ISO 8601 (UTC) — colons are invalid in filenames on FAT/exFAT/NTFS
@@ -166,7 +166,7 @@ jobs:
             gcc-arm-linux-gnueabi wget
 
       - name: Setup ccache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CCACHE_DIR }}
           key: ccache-${{ runner.os }}-${{ inputs.kernel_type || 'LineageOS' }}-${{ hashFiles('Scripts/build_kernel.sh') }}
@@ -202,22 +202,37 @@ jobs:
             "${{ inputs.kernel_repo || 'https://github.com/LineageOS/android_kernel_nothing_sm8475.git' }}" \
             "$KERNEL_DIR"
 
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git "$ANYKERNEL_DIR"
+          # Pinned: AnyKernel3 @ af770f7b16cf (2026-08-22) — last commit before the
+          # magiskboot v31.0 *beta* tools bump. Upstream ships no tags, so a SHA is the
+          # only pin available; full clone because a shallow one cannot check out non-tip.
+          git clone https://github.com/osm0sis/AnyKernel3.git "$ANYKERNEL_DIR"
+          git -C "$ANYKERNEL_DIR" checkout af770f7b16cf8f8eb7c68614b2a693b3b361c90c
           rm -rf "$ANYKERNEL_DIR/.git"
 
       - name: Clone SUSFS
         if: ${{ inputs.susfs_support == true }}
         run: |
-          # Pinned: gki-android13-5.10 @ 28619f1263fd (2026-06-22) — no tags exist for this branch
-          git clone --depth=1 -b "${{ inputs.susfs_branch || 'gki-android13-5.10' }}" \
-            https://gitlab.com/simonpunk/susfs4ksu.git
+          # Pinned: SUSFS v2.3.0 @ f2878eb5c0c9 (2026-09-06). The branch carries no
+          # current tag (only 1.4.2-gki-android13-5.10 from 2024), so the SHA is the pin.
+          # Full clone, not --depth=1: a shallow clone cannot check out a non-tip commit.
+          branch="${{ inputs.susfs_branch || 'gki-android13-5.10' }}"
+          git clone -b "$branch" https://gitlab.com/simonpunk/susfs4ksu.git
+          if [ "$branch" = "gki-android13-5.10" ]; then
+            git -C susfs4ksu checkout f2878eb5c0c9c7082212ef109b9e9e5042fd9fab
+          else
+            echo "Non-default SUSFS branch '$branch' — no pin available, tracking tip"
+          fi
 
       - name: Setup SukiSU-Ultra
         run: |
           cd "$KERNEL_DIR"
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s v4.1.3
-          git -C KernelSU fetch origin miuix:miuix 2>/dev/null || \
-            git -C KernelSU branch miuix HEAD 2>/dev/null || true
+          # Pinned: SukiSU-Ultra v4.2.0 = 85eb4a95b8a6 (2026-09-01); setup.sh is fetched
+          # at that same commit so the installer itself is immutable too.
+          # setup.sh swallows a failed checkout ("git checkout ... || echo") and silently
+          # leaves KernelSU on main HEAD, so the ref is verified afterwards.
+          SUKISU_REV=85eb4a95b8a61d756ecf53b9c5785e48e1b15039
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
+          test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
 
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
@@ -250,7 +265,13 @@ jobs:
         if: ${{ inputs.bbg_support == true }}
         run: |
           cd "$KERNEL_DIR"
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+          # Pinned: v1.1 = d4f7302190b8 (2025-12-24), the latest tagged release; setup.sh
+          # fetched at that same commit. The ref is passed as a TAG, not a SHA: setup.sh
+          # clones with `git clone --branch "$ref"`, which resolves tags/branches only.
+          BBG_TAG=v1.1
+          BBG_REV=d4f7302190b83246266598eb5d59c6b36fa22bdc
+          wget -O- "https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/${BBG_REV}/setup.sh" | bash -s "$BBG_TAG"
+          test "$(git -C Baseband-guard rev-parse HEAD)" = "$BBG_REV"
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
 
       - name: Apply Droidspaces patches
@@ -259,6 +280,8 @@ jobs:
           # GKI 5.10 kABI fix: SYSVIPC variant 6_7_8 (task_struct reserved slots 6-8 are
           # free on LineageOS sm8475; slot 1 is used by pf_io_worker so 1_2_3 would bootloop)
           # plus the POSIX_MQUEUE padding fix mandatory for kernels <= 5.10.
+          # Vendored from ravindu644/Droidspaces-OSS @ 4106757e0f72 (2026-04-22, still
+          # current as of upstream release v6.5.5) — verified identical to upstream.
           patch_dir="$GITHUB_WORKSPACE/patches/droidspaces"
           if [ ! -d "$patch_dir" ]; then
             echo "Droidspaces patches dir not found: $patch_dir" >&2
@@ -306,7 +329,7 @@ jobs:
           Scripts/package_anykernel.sh
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}
           path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
@@ -314,7 +337,7 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: "${{ inputs.kernel_type || 'LineageOS' }}-${{ github.run_number }}"
           name: "NP2 Kernel – ${{ inputs.kernel_type || 'LineageOS' }} #${{ github.run_number }}"
@@ -328,7 +351,7 @@ jobs:
 
       - name: Upload .config for debugging
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: config-NP2-SukiSU-Ultra
           path: kernel/out/.config
@@ -351,7 +374,7 @@ jobs:
 
       - name: Upload .rej files
         if: always() && steps.collect_rej.outputs.found == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rej-NP2-SukiSU-Ultra
           path: rej/
