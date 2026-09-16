@@ -125,6 +125,24 @@ echo "CONFIG_FUTEX_PI=y" >> "${EXTRA_CFG}"
 
 cat "${EXTRA_CFG}" >> out/.config
 make ${MAKE_ARGS} olddefconfig
+
+# olddefconfig silently discards any symbol the Kconfig tree does not declare. That is
+# how CONFIG_KSU_SUSFS was dropped for months while the build stayed green and the
+# release notes still said "SUSFS: true". Fail the build instead.
+required=("CONFIG_KSU")
+if [ "${SUSFS_SUPPORT}" = "true" ]; then required+=("CONFIG_KSU_SUSFS"); fi
+if [ "${KPM_SUPPORT}" = "true" ]; then required+=("CONFIG_KPM"); fi
+if [ "${BBG_SUPPORT}" = "true" ]; then required+=("CONFIG_BBG"); fi
+
+missing=()
+for sym in "${required[@]}"; do
+  grep -q "^${sym}=y" out/.config || missing+=("${sym}")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  echo "ERROR: requested feature(s) absent from out/.config: ${missing[*]}" >&2
+  echo "The symbol is not declared by the checked-out sources; the feature would compile out silently." >&2
+  exit 1
+fi
 [ -f scripts/setlocalversion ] && sed -i 's/-dirty//g' scripts/setlocalversion || true
 
 JOBS=$(nproc)

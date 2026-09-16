@@ -12,11 +12,11 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 
 **V3** — KPM builds require `CONFIG_KPM=y`, `CONFIG_KALLSYMS=y`, `CONFIG_KALLSYMS_ALL=y`, `CONFIG_KPROBES=y` — all four or none.
 
-**V4** — SUSFS builds require `CONFIG_KSU_SUSFS=y` and the SUSFS patch applied before compilation.
+**V4** — SUSFS builds require `CONFIG_KSU_SUSFS=y` **and** a SukiSU revision that declares that symbol. Only the `builtin` branch does; release tags, `main` and `dev` do not. Both halves are mandatory: the susfs4ksu kernel-side patch supplies `fs/susfs.c` and the `#ifdef CONFIG_KSU_SUSFS` hunks, while the symbol that switches them on comes from SukiSU's `builtin` tree.
 
 **V5** — The KernelSU setup must use `SukiSU-Ultra/SukiSU-Ultra` setup.sh, not `ReSukiSU/ReSukiSU`, to stay in sync with the manager app.
 
-**V6** — The pinned SukiSU-Ultra revision must match the installed manager app version. Mismatch → driver/manager error on device. Current pin: **v4.2.0** = `85eb4a95b8a61d756ecf53b9c5785e48e1b15039`; the manager app must be updated to v4.2.0 alongside any kernel flashed from this workflow.
+**V6** — The driver version reported to the manager app must match the installed manager's version code. The SHA pin does **not** control this: SukiSU's `kernel/Makefile` computes `KSU_VERSION` from a live `api.github.com/.../commits?sha=main` count at build time, and the local fallback reads the same upstream `main` ref. It must therefore be pinned explicitly via `KSU_VERSION=<code>` in `MAKE_ARGS`. Current value: **40900**, matching manager 4.2.0 (40900). Bumping the manager means bumping this number in the same commit.
 
 **V7** — GitHub Releases are created only on `workflow_dispatch` triggers, never on `workflow_call` (i.e., not when invoked from `build-all.yml`).
 
@@ -26,17 +26,19 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 
 | Dependency | Pin | Upstream stable |
 | --- | --- | --- |
-| SukiSU-Ultra (+ its `setup.sh`) | `85eb4a95b8a61d756ecf53b9c5785e48e1b15039` | v4.2.0 (2026-09-01) |
-| susfs4ksu | `f2878eb5c0c9c7082212ef109b9e9e5042fd9fab` | SUSFS v2.3.0 (2026-09-06); branch has no current tag |
+| SukiSU-Ultra (+ its `setup.sh`) | `b20dee702035af09cb2ecb5f35443bbc1747f3e6` | `builtin` branch head (2026-09-13); branch is unreleased and untagged — tags carry no SUSFS |
+| susfs4ksu | `f2878eb5c0c9c7082212ef109b9e9e5042fd9fab` | SUSFS v2.3.0 (version bumped 2026-08-30 in `818714ed`; this commit is 2026-09-06). Branch has no current tag |
 | Baseband-guard (+ its `setup.sh`) | `d4f7302190b83246266598eb5d59c6b36fa22bdc` | v1.1 (2025-12-24) |
 | AnyKernel3 | `af770f7b16cf8f8eb7c68614b2a693b3b361c90c` | no tags; last commit before magiskboot v31.0 *beta* |
 | SukiSU_KernelPatch_patch | release tag `0.13.0` | 0.13.0 (also `releases/latest`) |
 | Droidspaces-OSS patches | vendored from `4106757e0f722fd9afa888808ec91f4ff855e515` | v6.5.5 (patch dir unchanged since 2026-04-22) |
 | GitHub Actions | SHA-pinned with `# vX.Y.Z` comment | checkout v7.0.1, cache v6.1.0, upload-artifact v7.0.1, action-gh-release v3.0.3 |
 
-Two refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-facing inputs — pinning defeats the override), and the Baseband-guard ref passed to its `setup.sh` (that script uses `git clone --branch`, which rejects raw SHAs; the tag `v1.1` is passed, and the resulting HEAD is asserted against the pinned SHA).
+Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-facing inputs — pinning defeats the override); the Baseband-guard ref passed to its `setup.sh` (that script uses `git clone --branch`, which rejects raw SHAs — the tag `v1.1` is passed and the resulting HEAD is asserted against the pinned SHA); and `SukiSU_KernelPatch_patch`, pinned by the mutable release tag `0.13.0`. The last one is a real gap: a tag can be moved and release assets re-uploaded. Closing it means checking `patch_linux` against `sha256:ea4884140c0ee8835bc79b67e4c9b46094c6640d6407f0aab34d2df4e28e0450`.
 
-**V10** — Any installer script consumed via `curl | bash` must have its resulting checkout verified. Both SukiSU-Ultra's and Baseband-guard's `setup.sh` tolerate a failed `git checkout` and leave the tree on the default branch; without a `rev-parse HEAD` assertion a bad pin builds silently wrong sources.
+**V10** — Any installer script consumed via `curl | bash` must have its resulting checkout verified with `rev-parse HEAD`. SukiSU-Ultra's `setup.sh` tolerates a failed `git checkout` (`git checkout "$1" ... || echo`) and leaves the tree on the default branch; Baseband-guard's fresh-clone path aborts correctly under `set -eu`, but its update path has the same hole, and the assertion also catches a re-pointed tag.
+
+**V11** — Every feature the workflow claims to enable must be asserted present in `out/.config` after `olddefconfig`, which silently discards undeclared symbols. Without this, a missing Kconfig symbol produces a green build, a valid `Image`, and release notes advertising a feature that is not in the kernel — exactly what happened to SUSFS.
 
 ## §I — Interfaces
 
@@ -128,4 +130,9 @@ Two refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-fa
 - [x] T14: SHA-pin every third-party ref and bump to upstream stable — SukiSU-Ultra v4.1.3 → v4.2.0, SUSFS to v2.3.0 tip, Baseband-guard unpinned `main` → v1.1, AnyKernel3 unpinned `master` → pre-magiskboot-beta commit, all four GitHub Actions to SHAs. See V9. The old `# Pinned: 28619f1263fd` SUSFS comment was false — the clone tracked the branch tip and had drifted 21 commits (incl. 8 rewrites of the applied patch and a v2.2.0 → v2.3.0 bump)
 - [x] T15: Verify the checkout after each `curl | bash` installer (V10) and drop the dead `git -C KernelSU fetch origin miuix:miuix` — SukiSU-Ultra has no `miuix` branch, so that line always fell through to its no-op fallback
 - [ ] T16: Kernel sources lag `android13-5.10-lts` (5.10.269): LineageOS `lineage-23.2` at 5.10.246 (idle since 2026-01-24), NothingOSS `sm8475/b/mr` at 5.10.237 (has the newer Pong-B4.1 vendor base), arter97 `master` at 5.10.251. Nothing to bump in this repo — the lag is upstream's
-- [ ] T17: `patches/arter97/avc_compat.patch` is unreachable — no arter97 job exists and `extra_patches_dir` defaults empty. The patch still applies cleanly to arter97 `master` and is still required (arter97 uses `security_sid_to_context_stack`), so either wire a job or drop the file
+\1
+- [x] T18: Fix SUSFS never being compiled in. `CONFIG_KSU_SUSFS` is declared only by SukiSU's `builtin` branch; under the v4.2.0 tag the symbol did not exist, `olddefconfig` dropped it, and all ~250 `#ifdef CONFIG_KSU_SUSFS` hunks from the 50_ patch compiled out while the release notes said `SUSFS: true`. Verified against a shipped `Image`: zero `susfs` strings, `baseband_guard` strings present. susfs4ksu's own `kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch` is not the fix — it targets official KernelSU and fails 5-14 hunks against every SukiSU revision tried, tag and `main` alike
+- [x] T19: Pin `KSU_VERSION=40900` in `MAKE_ARGS` — see V6. Symptom was "manager version (40900) and kernelsu driver version (40922) mismatch!"; 40922 is `40000 + count(main) - 2815` with `count(main)` = 3737
+- [x] T20: Assert requested features land in `out/.config` before building — see V11
+- [ ] T21: `ShirkNeko/susfs4ksu` is a mirror of simonpunk's GitLab repo, not a SukiSU-specific fork (identical branch head SHAs). Recorded so it is not mistaken for one again
+- [ ] T22: The `builtin` branch is unreleased and shares no history with `main` (802 commits vs 3737, no merge base in the tag line). It carries no tags, so the pin cannot be tied to a version — re-verify it deliberately when bumping

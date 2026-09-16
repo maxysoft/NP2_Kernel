@@ -134,6 +134,11 @@ jobs:
       CCACHE_MAXSIZE: 2G
       CCACHE_SLOPPINESS: time_macros,include_file_mtime
       CCACHE_PATH: /usr/bin
+      # KSU_VERSION is pinned here on purpose. SukiSU's kernel/Makefile derives it at
+      # build time from a live `api.github.com/.../commits?sha=main` count, so the SHA
+      # pin does NOT control it: builds reported 40922 (main's count) while the manager
+      # app reports 40900, producing "manager version and kernelsu driver version
+      # mismatch!" on device. This value must equal the manager's version code.
       MAKE_ARGS: >-
         ARCH=arm64
         CROSS_COMPILE=aarch64-linux-gnu-
@@ -142,6 +147,7 @@ jobs:
         LD=ld.lld HOSTLD=ld.lld
         CC=clang CXX=clang++
         HOSTCC=clang HOSTCXX=clang++
+        KSU_VERSION=40900
         O=out
 
     steps:
@@ -226,11 +232,15 @@ jobs:
       - name: Setup SukiSU-Ultra
         run: |
           cd "$KERNEL_DIR"
-          # Pinned: SukiSU-Ultra v4.2.0 = 85eb4a95b8a6 (2026-09-01); setup.sh is fetched
-          # at that same commit so the installer itself is immutable too.
-          # setup.sh swallows a failed checkout ("git checkout ... || echo") and silently
-          # leaves KernelSU on main HEAD, so the ref is verified afterwards.
-          SUKISU_REV=85eb4a95b8a61d756ecf53b9c5785e48e1b15039
+          # Pinned: SukiSU-Ultra `builtin` branch @ b20dee702035 (2026-09-13).
+          # Deliberately NOT a release tag. v4.2.0, main and dev declare no KSU_SUSFS
+          # symbol at all, so `CONFIG_KSU_SUSFS=y` was silently dropped by olddefconfig
+          # and SUSFS compiled out of every build. `builtin` is the SUSFS-integrated
+          # variant (KSU_SUSFS + 9 sub-options, all default y) and still consumes
+          # fs/susfs.c + include/linux/susfs.h from the susfs4ksu patch below.
+          # setup.sh is fetched at the same commit; it swallows a failed checkout
+          # ("git checkout ... || echo"), so the ref is verified afterwards.
+          SUKISU_REV=b20dee702035af09cb2ecb5f35443bbc1747f3e6
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
 
