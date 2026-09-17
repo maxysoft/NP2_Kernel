@@ -27,7 +27,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 | Dependency | Pin | Upstream stable |
 | --- | --- | --- |
 | SukiSU-Ultra (+ its `setup.sh`) | `b20dee702035af09cb2ecb5f35443bbc1747f3e6` | `builtin` branch head (2026-09-13); branch is unreleased and untagged — tags carry no SUSFS |
-| susfs4ksu | `f2878eb5c0c9c7082212ef109b9e9e5042fd9fab` | SUSFS v2.3.0 (version bumped 2026-08-30 in `818714ed`; this commit is 2026-09-06). Branch has no current tag |
+| susfs4ksu | `18fe154470de0f40e2d90a36c23b1d2e544a9517` | SUSFS v2.3.0 (2026-09-06). Not the branch tip: the next commit needs `ksu_install_su_fd`, which SukiSU `builtin` does not define |
 | Baseband-guard (+ its `setup.sh`) | `d4f7302190b83246266598eb5d59c6b36fa22bdc` | v1.1 (2025-12-24) |
 | AnyKernel3 | `af770f7b16cf8f8eb7c68614b2a693b3b361c90c` | no tags; last commit before magiskboot v31.0 *beta* |
 | SukiSU_KernelPatch_patch | release tag `0.13.0` | 0.13.0 (also `releases/latest`) |
@@ -136,3 +136,4 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 - [x] T20: Assert requested features land in `out/.config` before building — see V11
 - [ ] T21: `ShirkNeko/susfs4ksu` is a mirror of simonpunk's GitLab repo, not a SukiSU-specific fork (identical branch head SHAs). Recorded so it is not mistaken for one again
 - [ ] T22: The `builtin` branch is unreleased and shares no history with `main` (802 commits vs 3737, no merge base in the tag line). It carries no tags, so the pin cannot be tied to a version — re-verify it deliberately when bumping
+- [x] T23: Fix `ld.lld: error: undefined symbol: ksu_install_su_fd` (run 35168531820). The susfs pin has to be paired with the SukiSU revision, not merely current: susfs's kernel-side patch calls into symbols its own KernelSU-side patch defines, and `builtin` substitutes its own integration for that patch. Moved the pin from `f2878eb5` back one commit to `18fe1544` — same SUSFS v2.3.0, still applies cleanly to `lineage-23.2`, and all 9 `ksu_*` symbols it expects are defined by the pinned `builtin` tree. Bumping either pin alone can break the link; bump them together and re-check the extern list
