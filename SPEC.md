@@ -32,6 +32,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 | AnyKernel3 | `af770f7b16cf8f8eb7c68614b2a693b3b361c90c` | no tags; last commit before magiskboot v31.0 *beta* |
 | SukiSU_KernelPatch_patch | release tag `0.13.0` | 0.13.0 (also `releases/latest`) |
 | Droidspaces-OSS patches | vendored from `4106757e0f722fd9afa888808ec91f4ff855e515` | v6.6.0 (patch dir unchanged since 2026-04-22) |
+| ACK GKI release (LineageOS backport) | vendored in `patches/lineage-lts`: `android12-5.10.269_r00` @ `47f3be4bebff` merged into `lineage-23.2` @ `4ec5491f6b5f` | latest `android12-5.10` GKI release tag (2026-10-13) |
 | GitHub Actions | SHA-pinned with `# vX.Y.Z` comment | checkout v7.0.1, cache v6.1.0, upload-artifact v7.0.2, action-gh-release v3.0.3 |
 
 Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-facing inputs — pinning defeats the override); the Baseband-guard ref passed to its `setup.sh` (that script uses `git clone --branch`, which rejects raw SHAs — the tag `v1.1` is passed and the resulting HEAD is asserted against the pinned SHA); and `SukiSU_KernelPatch_patch`, pinned by the mutable release tag `0.13.0`. The last one is a real gap: a tag can be moved and release assets re-uploaded. Closing it means checking `patch_linux` against `sha256:ea4884140c0ee8835bc79b67e4c9b46094c6640d6407f0aab34d2df4e28e0450`.
@@ -57,7 +58,7 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 | `susfs_force` | `false` | Set `true` to ignore SUSFS patch failures |
 | `droidspaces_support` | `false` | Applies `patches/droidspaces` kABI fixes + container configs |
 | `kernel_type` | `LineageOS` | Used in zip name and release tag |
-| `extra_patches_dir` | `` | Repo-local dir of `.patch`/`.diff` files |
+| `extra_patches_dir` | `patches/lineage-lts` | Repo-local dir of `.patch`/`.diff` files. The default holds the LineageOS-only LTS backport (§L); clear it when overriding `kernel_repo`/`kernel_branch` |
 
 ### I.zip-name — output artifact
 
@@ -102,7 +103,7 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 
 **D1** — Enabling GKI container support (`CONFIG_SYSVIPC`, `CONFIG_IPC_NS`, …) shifts `task_struct`/`user_struct` offsets and bootloops vendor modules. The `patches/droidspaces` kABI fixes are MANDATORY whenever `droidspaces_support=true` — configs alone will brick the device.
 
-**D2** — SYSVIPC kABI variant is `6_7_8`. Verified against LineageOS sm8475 `task_struct`: slot 1 is used by `pf_io_worker`, slots 2–8 free. Variant `1_2_3` would collide on slot 1 and bootloop; `3_4_5` and `6_7_8` both fit. If a future kernel rev consumes slots 6–8, re-verify and swap to `3_4_5`.
+**D2** — SYSVIPC kABI variant is `6_7_8`. Verified against LineageOS sm8475 `task_struct`: slot 1 is used by `pf_io_worker` and, since the 5.10.269 backport (§L), slot 2 by ACK; slots 3–8 free. Variant `1_2_3` would collide on slot 1 and bootloop; `3_4_5` and `6_7_8` both fit. If a future kernel rev consumes slots 6–8, re-verify and swap to `3_4_5`.
 
 **D3** — POSIX_MQUEUE padding patch (`002-posix-mqueue-abi-padding.patch`) is required for kernels ≤ 5.10, applied alongside the SYSVIPC patch.
 
@@ -111,6 +112,55 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 **D5** — Kernel support is only half of Droidspaces. The userspace side (app + SELinux `.cil` policy + init service) is out of scope for this workflow and must be installed separately.
 
 **D6** — Boot cannot be verified in CI. A green build only proves patches applied and configs compiled — device flashing confirms no bootloop.
+
+## §L — LineageOS LTS backport (`patches/lineage-lts`)
+
+**L1** — The source is the ACK GKI release tag `android12-5.10.269_r00`, not kernel.org stable. `lineage-23.2` declares `BRANCH=android12-5.10` and `KMI_GENERATION=9` in `build.config.common`, and already merges these tags (`Merge tag 'android12-5.10.246_r00'`). The tag keeps KMI generation 9 and carries ACK's reverts of ABI-breaking LTS commits. Conflicted files when merged into `lineage-23.2`: tag 13, ACK `android12-5.10-lts` head 13, kernel.org `v5.10.271` 83.
+
+**L2** — The vanilla AnyKernel3 flash replaces only `Image`; the ROM's vendor modules stay. They load only if every symbol they import keeps its `CONFIG_MODVERSIONS` CRC. Out-of-tree Qualcomm modules are built with `KMI_ENFORCED=1` against `android/abi_gki_aarch64_qcom`, so only KMI-listed symbols matter for them; in-tree `=m` modules can import any export.
+
+**L3** — The patch is the full `git diff` of a local merge, applied by the "Apply extra patches" step with GNU `patch -p1`. Its header records base, tag and merge commits. On `lineage-23.2` @ `4ec5491f6b5f` it reproduces the merge tree exactly (verified with GNU patch 2.7.6, the version on `ubuntu-latest`). Because `patch` accepts fuzz, the step first asserts that the clone's `HEAD` equals the header's `Base:` commit, for any patch that has one. If LineageOS moves `lineage-23.2`, or `kernel_repo`/`kernel_branch` is overridden without clearing `extra_patches_dir`, the build fails there: regenerate (or clear the input).
+
+Regenerate (use a full clone: googlesource ignores `--filter=blob:none` and refuses by-SHA blob fetches, so a blobless clone breaks the merge with `could not fetch <sha> from promisor remote`):
+
+```bash
+git clone -b lineage-23.2 https://github.com/LineageOS/android_kernel_nothing_sm8475.git kernel
+git -C kernel fetch https://android.googlesource.com/kernel/common 'refs/tags/android12-5.10.<N>_r00:refs/tags/android12-5.10.<N>_r00'
+git -C kernel merge --no-ff android12-5.10.<N>_r00   # resolve conflicts, see L4
+git -C kernel diff origin/lineage-23.2 HEAD > patches/lineage-lts/0001-android12-5.10.<N>_r00.patch   # prepend the header
+```
+
+Check `KMI_GENERATION` is still 9 in the new tag, then re-run the L5 checks.
+
+**L4** — Conflict resolutions for `.269_r00` (13 files). Lineage carries Qualcomm CLO versions of the qcom drivers, so every code conflict keeps Lineage's code and ports the LTS fix only where the fixed code exists. Only `fs/file.c` and the build scripts end up in `Image`. The qrtr, slimbus, mhi, sdhci-msm, sysmon and glink drivers are `=m`: CI builds only `Image` and the zip ships no modules, so on the phone the ROM's 5.10.246 modules keep running, and neither these resolutions nor any LTS fix in the 297 `=m` drivers reaches it.
+
+- `Documentation/devicetree/bindings`: kept Lineage's symlink, dropped the visconti yaml. `android/abi_gki_aarch64.xml`, `arch/mips/loongson64/Platform`: tag side.
+- `scripts/Kbuild.include`: Lineage's version; `gcc-min-version`/`clang-min-version` ported into `scripts/Makefile.compiler` because the merged `Makefile` and `lib/crypto/Makefile` call them.
+- `drivers/bus/mhi/host/main.c`: Lineage (CLO already checks the same alignment).
+- `drivers/mmc/host/sdhci-msm.c`: Lineage plus the missing `&= ~CORE_HC_SELECT_IN_MASK`.
+- `drivers/remoteproc/qcom_sysmon.c`: Lineage, `subsys_name_len` made `u32`.
+- `drivers/rpmsg/qcom_glink_native.c`: Lineage (CLO already unregisters the rpdev on close).
+- `drivers/slimbus/qcom-ngd-ctrl.c`: Lineage plus the delayed IRQ enable (`IRQF_NO_AUTOEN`, `enable_irq` after `platform_driver_register`).
+- `fs/file.c`: Lineage (already has the `close_range` fixes and follow-ups).
+- `net/qrtr/af_qrtr.c`: Lineage plus tx_flow radix tree to xarray, `__sock_put` reorder in `port_remove`, `size > len` check, init_net-only sockets.
+- `net/qrtr/ns.c`: Lineage plus the `remove()` use-after-free fix, limits (128 lookups, 512 nodes, 256 servers per node) and freeing the node on bye. CLO adds an exported `qrtr_get_service_id()` that `af_qrtr` calls on every received packet; it reads `nodes` and `node->servers` with no lock, and upstream has no such reader. A follow-up commit on the merge therefore frees published nodes and servers with `kfree_rcu` and runs that reader under `rcu_read_lock()`; without it, the ported node free opens a use-after-free when a remote processor sends BYE.
+
+**L5** — Verified 2026-10-13, vanilla trees (no KernelSU/SUSFS/BBG), clang 18.1.3, `LTO_NONE` and no CFI because the full-LTO link needs more than 12 GB RAM (CI keeps full LTO):
+
+- Base and merged trees both build `Image` and all 289 modules; the merged modules include every resolved Qualcomm driver, with no warnings in those files.
+- `vmlinux.symvers`: 0 of 7313 KMI-listed symbols removed or CRC-changed. Outside the lists, 13 exports removed and 93 CRCs changed (kvm, bluetooth `hci_conn_*`, `audit_log`, `nf_conncount_*`, `snd_compress_register`).
+- The 289 in-tree modules built from the base tree import 2132 vmlinux symbols; none is removed or CRC-changed.
+- The SUSFS 50_ patch and both Droidspaces patches apply to the merged tree (offsets only).
+
+Not verified locally: the KernelSU/SUSFS/BBG/KPM build and the full-LTO link (CI only), booting, and the imports of the ROM's own out-of-tree `vendor_dlkm` modules (taken as KMI-only from `KMI_ENFORCED=1`, not read from a device).
+
+**L6** — Runtime risk of the flashed kernel comes from the built-in LTS changes; the boot test is the check. The three risks below sit in `=m` drivers and take effect only if modules built from this tree are installed as well:
+
+- High: `net/qrtr/ns.c` lookup limit 128. Upstream raised it from 64 after an SM6475 phone hung at the boot animation; 128 is untested on SM8475. Too low means modem, audio or sensor services missing at boot. `dmesg` shows `exceeds max lookup limit`; the knob is `QRTR_NS_MAX_LOOKUPS`.
+- Medium: slimbus IRQ ordering changes audio probe order on the CLO driver.
+- Low: QRTR sockets fail inside a container with its own network namespace (Droidspaces only).
+
+**L7** — NothingOSS is not backported. `sm8475/b/mr` takes LTS as squashed code drops (5.10.252, highest real stable ancestor 5.10.233); merging the tag conflicts in 113 files. The `build-all.yml` NothingOSS job does not pass `extra_patches_dir`.
 
 ## §T — Task History
 
@@ -129,8 +179,8 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 - [x] T13: Sync spec with the build-date zip name (`5fa304f`, `1552280`) — see V1 and I.zip-name
 - [x] T14: SHA-pin every third-party ref and bump to upstream stable — SukiSU-Ultra v4.1.3 → v4.2.0, SUSFS to v2.3.0 tip, Baseband-guard unpinned `main` → v1.1, AnyKernel3 unpinned `master` → pre-magiskboot-beta commit, all four GitHub Actions to SHAs. See V9. The old `# Pinned: 28619f1263fd` SUSFS comment was false — the clone tracked the branch tip and had drifted 21 commits (incl. 8 rewrites of the applied patch and a v2.2.0 → v2.3.0 bump)
 - [x] T15: Verify the checkout after each `curl | bash` installer (V10) and drop the dead `git -C KernelSU fetch origin miuix:miuix` — SukiSU-Ultra has no `miuix` branch, so that line always fell through to its no-op fallback
-- [ ] T16: Kernel sources lag `android13-5.10-lts` (5.10.269): LineageOS `lineage-23.2` at 5.10.246 (idle since 2026-01-24), NothingOSS `sm8475/b/mr` at 5.10.237 (has the newer Pong-B4.1 vendor base), arter97 `master` at 5.10.251. Nothing to bump in this repo — the lag is upstream's
-- [ ] T17: `patches/arter97/avc_compat.patch` is unreachable — no arter97 job exists and `extra_patches_dir` defaults empty. The patch still applies cleanly to arter97 `master` and is still required (arter97 uses `security_sid_to_context_stack`), so either wire a job or drop the file
+- [ ] T16: Kernel sources lag `android13-5.10-lts` (5.10.269): LineageOS `lineage-23.2` at 5.10.246 (idle since 2026-01-24), NothingOSS `sm8475/b/mr` at 5.10.237 (has the newer Pong-B4.1 vendor base), arter97 `master` at 5.10.251. Nothing to bump in this repo — the lag is upstream's. LineageOS is now backported in-repo (T25); NothingOSS still lags
+- [ ] T17: `patches/arter97/avc_compat.patch` is unreachable — no arter97 job exists and `extra_patches_dir` defaults to the LineageOS backport. The patch still applies cleanly to arter97 `master` and is still required (arter97 uses `security_sid_to_context_stack`), so either wire a job or drop the file
 - [x] T18: Fix SUSFS never being compiled in. `CONFIG_KSU_SUSFS` is declared only by SukiSU's `builtin` branch; under the v4.2.0 tag the symbol did not exist, `olddefconfig` dropped it, and all ~250 `#ifdef CONFIG_KSU_SUSFS` hunks from the 50_ patch compiled out while the release notes said `SUSFS: true`. Verified against a shipped `Image`: zero `susfs` strings, `baseband_guard` strings present. susfs4ksu's own `kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch` is not the fix — it targets official KernelSU and fails 5-14 hunks against every SukiSU revision tried, tag and `main` alike
 - [x] T19: Pin `KSU_VERSION=40900` in `MAKE_ARGS` — see V6. Symptom was "manager version (40900) and kernelsu driver version (40922) mismatch!"; 40922 is `40000 + count(main) - 2815` with `count(main)` = 3737
 - [x] T20: Assert requested features land in `out/.config` before building — see V11
@@ -138,3 +188,4 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 - [ ] T22: The `builtin` branch is unreleased and shares no history with `main` (802 commits vs 3737, no merge base in the tag line). It carries no tags, so the pin cannot be tied to a version — re-verify it deliberately when bumping
 - [x] T23: Fix `ld.lld: error: undefined symbol: ksu_install_su_fd` (run 35168531820). The susfs pin has to be paired with the SukiSU revision, not merely current: susfs's kernel-side patch calls into symbols its own KernelSU-side patch defines, and `builtin` substitutes its own integration for that patch. Moved the pin from `f2878eb5` back one commit to `18fe1544` — same SUSFS v2.3.0, still applies cleanly to `lineage-23.2`, and all 9 `ksu_*` symbols it expects are defined by the pinned `builtin` tree. Bumping either pin alone can break the link; bump them together and re-check the extern list
 - [x] T24: Bump SukiSU `builtin` `b20dee70` → `6c284e95` and SUSFS `18fe1544` → `14c45388` together (see T23), upload-artifact v7.0.1 → v7.0.2. SUSFS gains 26 fixes (`clone_mnt()` race, NULL deref, dangling `nd->name`, leaks, SUS_KSTAT spoofing). Its tip patch adds one new extern, `ksu_handle_post_execveat_sucompat`, absent from the old `builtin` pin; the new pin defines it, and `ksu_install_su_fd`, which unblocks the SUSFS tip. Do not pin `builtin` commits from 2026-10-05 to 2026-10-08: they miss `kernel/arch.h` and do not build. The 50_ patch applies with no fuzz to `lineage-23.2` and `sm8475/b/mr`. Manager-facing delta checked against v4.2.0: `KSU_VERSION` logic unchanged, uapi still 2 (`EVENT_SERVICES` added only), and the stricter v2-only APK signature check accepts the v4.2.0 APK (blocks `0x7109871a` + padding). Added the `Check manager alignment` step (V6)
+- [x] T25: Backport LineageOS `lineage-23.2` from 5.10.246 to 5.10.269 by vendoring a merge of ACK GKI release `android12-5.10.269_r00` as `patches/lineage-lts`, the new `extra_patches_dir` default (`build-all.yml` LineageOS job only) — see §L

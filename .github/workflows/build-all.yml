@@ -17,6 +17,7 @@ jobs:
       susfs_support: true
       bbg_support: true
       susfs_force: false
+      extra_patches_dir: patches/lineage-lts
 
   build-nothingoss:
     name: Build (NothingOSS)

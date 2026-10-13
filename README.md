@@ -18,6 +18,7 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 - **[SUSFS](https://gitlab.com/simonpunk/susfs4ksu)**: Hide root from banking apps, games, and safety checks
 - **[BaseBandGuard](https://github.com/vc-teahouse/Baseband-guard)**: Prevent apps and modules from modifying critical files
 - **KPM Support**: KPM modules via [KernelPatch by SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch)
+- **Linux 5.10.269** (LineageOS build only): upstream LTS fixes from Google's `android12-5.10.269_r00` GKI release, merged onto LineageOS's 5.10.246 kernel. See `SPEC.md` §L
 
 ## Install
 

@@ -43,10 +43,10 @@ on:
         type: string
         default: 'gki-android13-5.10'
       extra_patches_dir:
-        description: 'Extra patch directory (repo-local)'
+        description: 'Extra patch directory (repo-local). Default is the LineageOS-only 5.10.269 backport; clear it for any other kernel_repo/kernel_branch'
         required: false
         type: string
-        default: ''
+        default: 'patches/lineage-lts'
       bbg_support:
         description: 'Enable BBG support'
         required: false
@@ -282,6 +282,11 @@ jobs:
           fi
           cd "$KERNEL_DIR"
           while IFS= read -r -d '' patch; do
+            base=$(sed -n '/^diff /q; s/^Base:.* @ \([0-9a-f]\{40\}\).*/\1/p' "$patch")
+            if [ -n "$base" ] && [ "$base" != "$(git rev-parse HEAD)" ]; then
+              echo "::error::$patch was generated against $base but the clone is at $(git rev-parse HEAD). Regenerate it (SPEC §L3) or clear extra_patches_dir."
+              exit 1
+            fi
             echo "Applying $patch"
             patch -p1 < "$patch"
           done < <(find "$patch_dir" -maxdepth 1 -type f \( -name '*.patch' -o -name '*.diff' \) -print0 | sort -z)
