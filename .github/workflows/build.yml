@@ -61,6 +61,11 @@ on:
         required: false
         type: boolean
         default: false
+      rcu_lazy:
+        description: 'Enable lazy RCU (patches/rcu-lazy, CONFIG_RCU_LAZY, rcu_nocbs=0-7)'
+        required: false
+        type: boolean
+        default: true
       kernel_type:
         description: 'Kernel type identifier (arter97, NothingOSS, LineageOS)'
         required: false
@@ -114,6 +119,10 @@ on:
         required: false
         type: boolean
         default: false
+      rcu_lazy:
+        required: false
+        type: boolean
+        default: true
       kernel_type:
         required: false
         type: string
@@ -300,6 +309,19 @@ jobs:
             patch -p1 < "$patch"
           done < <(find "$patch_dir" -maxdepth 1 -type f \( -name '*.patch' -o -name '*.diff' \) -print0 | sort -z)
 
+      - name: Apply performance patches
+        if: ${{ !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
+        run: |
+          dirs=(lz4)
+          if [ "${{ inputs.rcu_lazy }}" = "true" ]; then dirs+=(rcu-lazy); fi
+          cd "$KERNEL_DIR"
+          for d in "${dirs[@]}"; do
+            for patch in "$GITHUB_WORKSPACE/patches/$d"/*.patch; do
+              echo "Applying $patch"
+              patch -p1 < "$patch"
+            done
+          done
+
       - name: Apply SUSFS patches
         if: ${{ inputs.susfs_support == true }}
         run: |
@@ -368,6 +390,7 @@ jobs:
           KPM_SUPPORT="${{ inputs.kpm_support }}" \
           BBG_SUPPORT="${{ inputs.bbg_support }}" \
           DROIDSPACES_SUPPORT="${{ inputs.droidspaces_support }}" \
+          RCU_LAZY_SUPPORT="${{ inputs.rcu_lazy && !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}" \
           Scripts/build_kernel.sh
 
       - name: ccache stats
@@ -440,7 +463,7 @@ jobs:
           body: |
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
-            **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}
+            **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}  **Lazy RCU:** ${{ inputs.rcu_lazy && !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
             **Manager:** SukiSU-Ultra ${{ needs.build.outputs.manager }} — install this manager version, or it reports a driver version mismatch.
           files: "${{ env.ZIP }}.zip"
           draft: false

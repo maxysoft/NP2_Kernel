@@ -1,0 +1,49 @@
+From abe4d396ffa8796f0d48a557bc5bc8fcf37a4c1a Mon Sep 17 00:00:00 2001
+From: Frederic Weisbecker <frederic@kernel.org>
+Date: Wed, 29 Mar 2023 18:02:01 +0200
+Subject: [PATCH 17/20] rcu/nocb: Fix shrinker race against callback enqueuer
+
+The shrinker resets the lazy callbacks counter in order to trigger the
+pending lazy queue flush though the rcuog kthread. The counter reset is
+protected by the ->nocb_lock against concurrent accesses...except
+for one of them. Here is a list of existing synchronized readers/writer:
+
+1) The first lazy enqueuer (incrementing ->lazy_len to 1) does so under
+   ->nocb_lock and ->nocb_bypass_lock.
+
+2) The further lazy enqueuers (incrementing ->lazy_len above 1) do so
+   under ->nocb_bypass_lock _only_.
+
+3) The lazy flush checks and resets to 0 under ->nocb_lock and
+	->nocb_bypass_lock.
+
+The shrinker protects its ->lazy_len reset against cases 1) and 3) but
+not against 2). As such, setting ->lazy_len to 0 under the ->nocb_lock
+may be cancelled right away by an overwrite from an enqueuer, leading
+rcuog to ignore the flush.
+
+To avoid that, use the proper bypass flush API which takes care of all
+those details.
+
+Signed-off-by: Frederic Weisbecker <frederic@kernel.org>
+Signed-off-by: Paul E. McKenney <paulmck@kernel.org>
+
+(cherry picked from commit 7625926086765123251f765d91fc3a70617d334d)
+Backport notes: 5.10 wake_nocb_gp() takes the flags and releases ->nocb_lock itself, so the flush stays under the lock and the separate unlock is dropped.
+---
+ kernel/rcu/tree_plugin.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/kernel/rcu/tree_plugin.h b/kernel/rcu/tree_plugin.h
+index 3f3b931cd372..60e867e80329 100644
+--- a/kernel/rcu/tree_plugin.h
++++ b/kernel/rcu/tree_plugin.h
+@@ -2345,7 +2345,7 @@ lazy_rcu_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
+ 		if (_count == 0)
+ 			continue;
+ 		rcu_nocb_lock_irqsave(rdp, flags);
+-		WRITE_ONCE(rdp->lazy_len, 0);
++		WARN_ON_ONCE(!rcu_nocb_flush_bypass(rdp, NULL, jiffies, false));
+ 		wake_nocb_gp(rdp, false, flags);
+ 		sc->nr_to_scan -= _count;
+ 		count += _count;

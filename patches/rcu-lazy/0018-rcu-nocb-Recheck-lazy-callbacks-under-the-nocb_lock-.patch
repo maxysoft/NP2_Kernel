@@ -1,0 +1,50 @@
+From 79e1ceaab7295641e03590303d9b774cf1562aee Mon Sep 17 00:00:00 2001
+From: Frederic Weisbecker <frederic@kernel.org>
+Date: Wed, 29 Mar 2023 18:02:02 +0200
+Subject: [PATCH 18/20] rcu/nocb: Recheck lazy callbacks under the ->nocb_lock
+ from shrinker
+
+The ->lazy_len is only checked locklessly. Recheck again under the
+->nocb_lock to avoid spending more time on flushing/waking if not
+necessary. The ->lazy_len can still increment concurrently (from 1 to
+infinity) but under the ->nocb_lock we at least know for sure if there
+are lazy callbacks at all (->lazy_len > 0).
+
+Signed-off-by: Frederic Weisbecker <frederic@kernel.org>
+Signed-off-by: Paul E. McKenney <paulmck@kernel.org>
+
+(cherry picked from commit b96a8b0b5be40f9bc9e45819f14b32ea9cdce73f)
+Backport notes: no rcu_rdp_is_offloaded() skip in the 5.10 loop (5c83cedbaaad not taken: 5.10 cannot (de-)offload at runtime).
+---
+ kernel/rcu/tree_plugin.h | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/rcu/tree_plugin.h b/kernel/rcu/tree_plugin.h
+index 60e867e80329..07c7c7d24ff6 100644
+--- a/kernel/rcu/tree_plugin.h
++++ b/kernel/rcu/tree_plugin.h
+@@ -2340,11 +2340,22 @@ lazy_rcu_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
+ 	/* Snapshot count of all CPUs */
+ 	for_each_possible_cpu(cpu) {
+ 		struct rcu_data *rdp = per_cpu_ptr(&rcu_data, cpu);
+-		int _count = READ_ONCE(rdp->lazy_len);
++		int _count;
+ 
+-		if (_count == 0)
++		if (!READ_ONCE(rdp->lazy_len))
+ 			continue;
++
+ 		rcu_nocb_lock_irqsave(rdp, flags);
++		/*
++		 * Recheck under the nocb lock. Since we are not holding the bypass
++		 * lock we may still race with increments from the enqueuer but still
++		 * we know for sure if there is at least one lazy callback.
++		 */
++		_count = READ_ONCE(rdp->lazy_len);
++		if (!_count) {
++			rcu_nocb_unlock_irqrestore(rdp, flags);
++			continue;
++		}
+ 		WARN_ON_ONCE(!rcu_nocb_flush_bypass(rdp, NULL, jiffies, false));
+ 		wake_nocb_gp(rdp, false, flags);
+ 		sc->nr_to_scan -= _count;

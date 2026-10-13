@@ -18,6 +18,8 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 - **[SUSFS](https://gitlab.com/simonpunk/susfs4ksu)**: Hide root from banking apps, games, and safety checks
 - **[BaseBandGuard](https://github.com/vc-teahouse/Baseband-guard)**: Prevent apps and modules from modifying critical files
 - **KPM Support**: KPM modules via [KernelPatch by SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch)
+- **LZ4 1.10**: newer LZ4 library for zram and erofs, from [arter97's Nothing Phone 2 kernel](https://github.com/arter97/android_kernel_nothing_sm8475). See `SPEC.md` §R
+- **Lazy RCU** (on by default, `rcu_lazy` workflow input): the kernel batches deferred frees so idle CPUs wake less often. See `SPEC.md` §R
 - **Linux 5.10.269** (LineageOS build only): upstream LTS fixes from Google's `android12-5.10.269_r00` GKI release, merged onto LineageOS's 5.10.246 kernel. See `SPEC.md` §L
 
 ## Install

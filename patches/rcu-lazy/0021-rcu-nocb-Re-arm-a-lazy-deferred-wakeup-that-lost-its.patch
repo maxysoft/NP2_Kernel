@@ -1,0 +1,39 @@
+From d510338a1831e2f2f1bbf114903eaef745eeb629 Mon Sep 17 00:00:00 2001
+From: "Tomas E. Todorov" <t.todorov@tacocrypto.io>
+Date: Wed, 14 Oct 2026 00:55:06 +0200
+Subject: [PATCH] rcu/nocb: Re-arm a lazy deferred wakeup that lost its timer
+
+nocb_gp_wait() resets the leader's ->nocb_defer_wakeup to
+RCU_NOCB_WAKE_NOT and deletes its ->nocb_timer while holding a
+follower's ->nocb_lock, not the leader's. If that runs between
+mod_timer() and WRITE_ONCE(RCU_NOCB_WAKE_LAZY) in wake_nocb_gp_defer(),
+the level stays LAZY with no timer pending. The tick does not rescue a
+LAZY level (rcu_pending() only acts on WAKE and above), and later lazy
+requests armed the timer only from RCU_NOCB_WAKE_NOT, so lazy callbacks
+on the leader CPU could wait for unrelated RCU activity.
+
+Also arm the timer when the level is LAZY and no timer is pending.
+Unlike the claim in the previous commit, not every writer of
+->nocb_defer_wakeup holds the rdp's ->nocb_lock.
+---
+ kernel/rcu/tree_plugin.h | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/kernel/rcu/tree_plugin.h b/kernel/rcu/tree_plugin.h
+index 53f99ca5948d..ec24f349f44e 100644
+--- a/kernel/rcu/tree_plugin.h
++++ b/kernel/rcu/tree_plugin.h
+@@ -1703,7 +1703,9 @@ static void wake_nocb_gp_defer(struct rcu_data *rdp, int waketype,
+ 			       const char *reason)
+ {
+ 	if (waketype == RCU_NOCB_WAKE_LAZY &&
+-			rdp->nocb_defer_wakeup == RCU_NOCB_WAKE_NOT) {
++	    (rdp->nocb_defer_wakeup == RCU_NOCB_WAKE_NOT ||
++	     (rdp->nocb_defer_wakeup == RCU_NOCB_WAKE_LAZY &&
++	      !timer_pending(&rdp->nocb_timer)))) {
+ 		mod_timer(&rdp->nocb_timer, jiffies + jiffies_till_flush);
+ 		WRITE_ONCE(rdp->nocb_defer_wakeup, waketype);
+ 	} else {
+-- 
+2.55.0
+

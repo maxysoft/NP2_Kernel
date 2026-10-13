@@ -108,6 +108,12 @@ if [ "${DROIDSPACES_SUPPORT:-false}" = "true" ]; then
   echo "CONFIG_TMPFS_POSIX_ACL=y" >> "${EXTRA_CFG}"
 fi
 
+if [ "${RCU_LAZY_SUPPORT:-false}" = "true" ]; then
+  echo "CONFIG_RCU_LAZY=y" >> "${EXTRA_CFG}"
+  cmdline=$(sed -n 's/^CONFIG_CMDLINE="\(.*\)"$/\1/p' out/.config)
+  echo "CONFIG_CMDLINE=\"${cmdline:+${cmdline} }rcu_nocbs=0-7\"" >> "${EXTRA_CFG}"
+fi
+
 # TCP BBR congestion control
 echo "CONFIG_TCP_CONG_BBR=y" >> "${EXTRA_CFG}"
 echo 'CONFIG_DEFAULT_TCP_CONG="bbr"' >> "${EXTRA_CFG}"
@@ -133,11 +139,15 @@ required=("CONFIG_KSU")
 if [ "${SUSFS_SUPPORT}" = "true" ]; then required+=("CONFIG_KSU_SUSFS"); fi
 if [ "${KPM_SUPPORT}" = "true" ]; then required+=("CONFIG_KPM"); fi
 if [ "${BBG_SUPPORT}" = "true" ]; then required+=("CONFIG_BBG"); fi
+if [ "${RCU_LAZY_SUPPORT:-false}" = "true" ]; then required+=("CONFIG_RCU_LAZY"); fi
 
 missing=()
 for sym in "${required[@]}"; do
   grep -q "^${sym}=y" out/.config || missing+=("${sym}")
 done
+if [ "${RCU_LAZY_SUPPORT:-false}" = "true" ]; then
+  grep -q '^CONFIG_CMDLINE=".*rcu_nocbs=0-7' out/.config || missing+=("rcu_nocbs=0-7 in CONFIG_CMDLINE")
+fi
 if [ "${#missing[@]}" -gt 0 ]; then
   echo "ERROR: requested feature(s) absent from out/.config: ${missing[*]}" >&2
   echo "The symbol is not declared by the checked-out sources; the feature would compile out silently." >&2

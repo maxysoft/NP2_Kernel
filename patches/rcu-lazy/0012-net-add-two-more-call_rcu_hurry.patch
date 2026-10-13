@@ -1,0 +1,143 @@
+From bb845d02bf21072265707af2a9a2b3ca0951178b Mon Sep 17 00:00:00 2001
+From: Eric Dumazet <edumazet@google.com>
+Date: Tue, 23 Apr 2024 20:54:08 +0000
+Subject: [PATCH 12/20] net: add two more call_rcu_hurry()
+
+I had failures with pmtu.sh selftests lately,
+with netns dismantles firing ref_tracking alerts [1].
+
+After much debugging, I found that some queued
+rcu callbacks were delayed by minutes, because
+of CONFIG_RCU_LAZY=y option.
+
+Joel Fernandes had a similar issue in the past,
+fixed with commit 483c26ff63f4 ("net: Use call_rcu_hurry()
+for dst_release()")
+
+In this commit, I make sure nexthop_free_rcu()
+and free_fib_info_rcu() are not delayed too much
+because they both can release device references.
+
+tools/testing/selftests/net/pmtu.sh no longer fails.
+
+Traces were:
+
+[  968.179860] ref_tracker: veth_A-R1@00000000d0ff3fe2 has 3/5 users at
+                    dst_alloc+0x76/0x160
+                    ip6_dst_alloc+0x25/0x80
+                    ip6_pol_route+0x2a8/0x450
+                    ip6_pol_route_output+0x1f/0x30
+                    fib6_rule_lookup+0x163/0x270
+                    ip6_route_output_flags+0xda/0x190
+                    ip6_dst_lookup_tail.constprop.0+0x1d0/0x260
+                    ip6_dst_lookup_flow+0x47/0xa0
+                    udp_tunnel6_dst_lookup+0x158/0x210
+                    vxlan_xmit_one+0x4c2/0x1550 [vxlan]
+                    vxlan_xmit+0x52d/0x14f0 [vxlan]
+                    dev_hard_start_xmit+0x7b/0x1e0
+                    __dev_queue_xmit+0x20b/0xe40
+                    ip6_finish_output2+0x2ea/0x6e0
+                    ip6_finish_output+0x143/0x320
+                    ip6_output+0x74/0x140
+
+[  968.179860] ref_tracker: veth_A-R1@00000000d0ff3fe2 has 1/5 users at
+                    netdev_get_by_index+0xc0/0xe0
+                    fib6_nh_init+0x1a9/0xa90
+                    rtm_new_nexthop+0x6fa/0x1580
+                    rtnetlink_rcv_msg+0x155/0x3e0
+                    netlink_rcv_skb+0x61/0x110
+                    rtnetlink_rcv+0x19/0x20
+                    netlink_unicast+0x23f/0x380
+                    netlink_sendmsg+0x1fc/0x430
+                    ____sys_sendmsg+0x2ef/0x320
+                    ___sys_sendmsg+0x86/0xd0
+                    __sys_sendmsg+0x67/0xc0
+                    __x64_sys_sendmsg+0x21/0x30
+                    x64_sys_call+0x252/0x2030
+                    do_syscall_64+0x6c/0x190
+                    entry_SYSCALL_64_after_hwframe+0x76/0x7e
+
+[  968.179860] ref_tracker: veth_A-R1@00000000d0ff3fe2 has 1/5 users at
+                    ipv6_add_dev+0x136/0x530
+                    addrconf_notify+0x19d/0x770
+                    notifier_call_chain+0x65/0xd0
+                    raw_notifier_call_chain+0x1a/0x20
+                    call_netdevice_notifiers_info+0x54/0x90
+                    register_netdevice+0x61e/0x790
+                    veth_newlink+0x230/0x440
+                    __rtnl_newlink+0x7d2/0xaa0
+                    rtnl_newlink+0x4c/0x70
+                    rtnetlink_rcv_msg+0x155/0x3e0
+                    netlink_rcv_skb+0x61/0x110
+                    rtnetlink_rcv+0x19/0x20
+                    netlink_unicast+0x23f/0x380
+                    netlink_sendmsg+0x1fc/0x430
+                    ____sys_sendmsg+0x2ef/0x320
+                    ___sys_sendmsg+0x86/0xd0
+....
+[ 1079.316024]  ? show_regs+0x68/0x80
+[ 1079.316087]  ? __warn+0x8c/0x140
+[ 1079.316103]  ? ref_tracker_free+0x1a0/0x270
+[ 1079.316117]  ? report_bug+0x196/0x1c0
+[ 1079.316135]  ? handle_bug+0x42/0x80
+[ 1079.316149]  ? exc_invalid_op+0x1c/0x70
+[ 1079.316162]  ? asm_exc_invalid_op+0x1f/0x30
+[ 1079.316193]  ? ref_tracker_free+0x1a0/0x270
+[ 1079.316208]  ? _raw_spin_unlock+0x1a/0x40
+[ 1079.316222]  ? free_unref_page+0x126/0x1a0
+[ 1079.316239]  ? destroy_large_folio+0x69/0x90
+[ 1079.316251]  ? __folio_put+0x99/0xd0
+[ 1079.316276]  dst_dev_put+0x69/0xd0
+[ 1079.316308]  fib6_nh_release_dsts.part.0+0x3d/0x80
+[ 1079.316327]  fib6_nh_release+0x45/0x70
+[ 1079.316340]  nexthop_free_rcu+0x131/0x170
+[ 1079.316356]  rcu_do_batch+0x1ee/0x820
+[ 1079.316370]  ? rcu_do_batch+0x179/0x820
+[ 1079.316388]  rcu_core+0x1aa/0x4d0
+[ 1079.316405]  rcu_core_si+0x12/0x20
+[ 1079.316417]  __do_softirq+0x13a/0x3dc
+[ 1079.316435]  __irq_exit_rcu+0xa3/0x110
+[ 1079.316449]  irq_exit_rcu+0x12/0x30
+[ 1079.316462]  sysvec_apic_timer_interrupt+0x5b/0xe0
+[ 1079.316474]  asm_sysvec_apic_timer_interrupt+0x1f/0x30
+[ 1079.316569] RIP: 0033:0x7f06b65c63f0
+
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Cc: Joel Fernandes (Google) <joel@joelfernandes.org>
+Cc: Paul E. McKenney <paulmck@kernel.org>
+Reviewed-by: David Ahern <dsahern@kernel.org>
+Link: https://lore.kernel.org/r/20240423205408.39632-1-edumazet@google.com
+Signed-off-by: Jakub Kicinski <kuba@kernel.org>
+
+(cherry picked from commit c4e86b4363ac8ecf836def8e46973707688fd98f)
+---
+ include/net/nexthop.h    | 2 +-
+ net/ipv4/fib_semantics.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/include/net/nexthop.h b/include/net/nexthop.h
+index aa19809bfd73..6dba4a43e31f 100644
+--- a/include/net/nexthop.h
++++ b/include/net/nexthop.h
+@@ -124,7 +124,7 @@ static inline bool nexthop_get(struct nexthop *nh)
+ static inline void nexthop_put(struct nexthop *nh)
+ {
+ 	if (refcount_dec_and_test(&nh->refcnt))
+-		call_rcu(&nh->rcu, nexthop_free_rcu);
++		call_rcu_hurry(&nh->rcu, nexthop_free_rcu);
+ }
+ 
+ static inline bool nexthop_cmp(const struct nexthop *nh1,
+diff --git a/net/ipv4/fib_semantics.c b/net/ipv4/fib_semantics.c
+index 44b78e627dbf..da58b08fff1a 100644
+--- a/net/ipv4/fib_semantics.c
++++ b/net/ipv4/fib_semantics.c
+@@ -252,7 +252,7 @@ void free_fib_info(struct fib_info *fi)
+ 		return;
+ 	}
+ 
+-	call_rcu(&fi->rcu, free_fib_info_rcu);
++	call_rcu_hurry(&fi->rcu, free_fib_info_rcu);
+ }
+ EXPORT_SYMBOL_GPL(free_fib_info);
+ 

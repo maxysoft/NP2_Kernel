@@ -1,0 +1,44 @@
+From 8d7f7d49a397d1a6d9af8bf3d0b5a914c951eee6 Mon Sep 17 00:00:00 2001
+From: Eric Dumazet <edumazet@google.com>
+Date: Mon, 29 Apr 2024 18:36:43 +0000
+Subject: [PATCH 13/20] ipv6: anycast: use call_rcu_hurry() in aca_put()
+
+This is a followup of commit b5327b9a300e ("ipv6: use
+call_rcu_hurry() in fib6_info_release()").
+
+I had another pmtu.sh failure, and found another lazy
+call_rcu() causing this failure.
+
+aca_free_rcu() calls fib6_info_release() which releases
+devices references.
+
+We must not delay it too much or risk unregister_netdevice/ref_tracker
+traces because references to netdev are not released in time.
+
+This should speedup device/netns dismantles when CONFIG_RCU_LAZY=y
+
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Reviewed-by: David Ahern <dsahern@kernel.org>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+(cherry picked from commit fff6e6accdb71e5dd36e50478bd82d5409ac32d2)
+---
+ net/ipv6/anycast.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/net/ipv6/anycast.c b/net/ipv6/anycast.c
+index dacdea7fcb62..b0f56f8e529c 100644
+--- a/net/ipv6/anycast.c
++++ b/net/ipv6/anycast.c
+@@ -252,9 +252,8 @@ static void aca_free_rcu(struct rcu_head *h)
+ 
+ static void aca_put(struct ifacaddr6 *ac)
+ {
+-	if (refcount_dec_and_test(&ac->aca_refcnt)) {
+-		call_rcu(&ac->rcu, aca_free_rcu);
+-	}
++	if (refcount_dec_and_test(&ac->aca_refcnt))
++		call_rcu_hurry(&ac->rcu, aca_free_rcu);
+ }
+ 
+ static struct ifacaddr6 *aca_alloc(struct fib6_info *f6i,

@@ -32,6 +32,8 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 | AnyKernel3 | `af770f7b16cf8f8eb7c68614b2a693b3b361c90c` | no tags; last commit before magiskboot v31.0 *beta* |
 | SukiSU_KernelPatch_patch | release tag `0.13.0` + `patch_linux` sha256 `ea4884140c0ee8835bc79b67e4c9b46094c6640d6407f0aab34d2df4e28e0450` | 0.13.0 (also `releases/latest`) |
 | Droidspaces-OSS patches | vendored from `4106757e0f722fd9afa888808ec91f4ff855e515` | v6.6.0 (patch dir unchanged since 2026-04-22) |
+| LZ4 v1.10.0 (`patches/lz4`) | vendored: `lib/lz4` + `include/linux/lz4.h` from arter97/android_kernel_nothing_sm8475 @ `906ca150c6ae`, plus the level clamp (§R2) | LZ4 v1.10.0 |
+| Lazy RCU (`patches/rcu-lazy`) | vendored; each patch header names its source commit (ACK `android13-5.10` via arter97 @ `906ca150c6ae`, mainline up to v6.12) | — |
 | ACK GKI release (LineageOS backport) | vendored in `patches/lineage-lts`: `android12-5.10.269_r00` @ `47f3be4bebff` merged into `lineage-23.2` @ `4ec5491f6b5f` | latest `android12-5.10` GKI release tag (2026-10-13) |
 | GitHub Actions | SHA-pinned with `# vX.Y.Z` comment | checkout v7.0.1, cache v6.1.0, upload-artifact v7.0.2, download-artifact v8.0.2, action-gh-release v3.0.3 |
 
@@ -60,6 +62,7 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 | `susfs_force` | `false` | Set `true` to ignore SUSFS patch failures |
 | `droidspaces_support` | `false` | Applies `patches/droidspaces` kABI fixes + container configs |
 | `kernel_type` | `LineageOS` | Used in zip name and release tag |
+| `rcu_lazy` | `true` | Applies `patches/rcu-lazy`, sets `CONFIG_RCU_LAZY=y`, appends `rcu_nocbs=0-7` to `CONFIG_CMDLINE` (§R3) |
 | `extra_patches_dir` | `patches/lineage-lts` | Repo-local dir of `.patch`/`.diff` files. The default holds the LineageOS-only LTS backport (§L); clear it when overriding `kernel_repo`/`kernel_branch` |
 
 ### I.zip-name — output artifact
@@ -92,6 +95,7 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 - `CONFIG_ZRAM_DEF_COMP_ZSTD=y` — better ZRAM compression
 - `CONFIG_BPF_JIT=y` + `CONFIG_BPF_JIT_ALWAYS_ON=y` — eBPF performance
 - `CONFIG_FUTEX=y` + `CONFIG_FUTEX_PI=y` — required by Android, ensures enabled
+- `CONFIG_RCU_LAZY=y` + `rcu_nocbs=0-7` appended to `CONFIG_CMDLINE` — only when `rcu_lazy` is set (§R3)
 
 **P4** — The following configs are intentionally NOT added:
 
@@ -164,6 +168,35 @@ Not verified locally: the KernelSU/SUSFS/BBG/KPM build and the full-LTO link (CI
 
 **L7** — NothingOSS is not backported. `sm8475/b/mr` takes LTS as squashed code drops (5.10.252, highest real stable ancestor 5.10.233); merging the tag conflicts in 113 files. The `build-all.yml` NothingOSS job does not pass `extra_patches_dir`.
 
+## §R — Performance patches (`patches/lz4`, `patches/rcu-lazy`)
+
+**R1** — Same limit as L2: the zip flashes only `Image`, so a performance change must keep the CRC of every KMI-listed symbol and of every symbol the in-tree modules import. Check each change with `vmlinux.symvers` against the unpatched build plus `nm -u` over the in-tree `.ko` files, as in L5. The 2026-10-13 study ruled out:
+
+- MGLRU: `android12-5.10` has one spare 8-byte slot in `mm_struct` and none in `lruvec`; `android13-5.10` enabled it by changing its KMI.
+- zram features (recompression, writeback): `zram.ko` and `zsmalloc.ko` come from the ROM.
+- WALT and vendor scheduler, memory or binder features: they are vendor modules.
+- zstd 1.5 (no 5.10 port; zram uses lz4) and AutoFDO/Propeller (kbuild support starts in `android15-6.6`).
+
+**R2** — `patches/lz4` replaces LZ4 1.8.3 (`lib/lz4`, `include/linux/lz4.h`) with LZ4 v1.10.0 as adapted by arter97 for this phone (commits in the patch header), compiled with `-O3 -DLZ4_FAST_DEC_LOOP=1`. Every build applies it, for both kernel types, with no input: `lib/lz4` is identical in `lineage-23.2` and `sm8475/b/mr`, and the patch reproduces arter97's files exactly on both. zram (Pong sets `lz4` in `init.kernel.post_boot.sh`) and erofs (`/vendor`, `/odm`, `/vendor_dlkm`) use it. arter97 measured +3.8% zram throughput at 4K blocks; not measured on this build.
+
+- 13 `LZ4_*` exports are dropped and 5 change CRC; none is in a KMI list or imported by the 289 in-tree modules (verified 2026-10-14). They are not re-exported: out-of-tree vendor modules are built with `KMI_ENFORCED` against `abi_gki_aarch64_qcom`, which lists no LZ4 symbol.
+- `LZ4_compress_HC()` clamps levels 10 and above to 9. Those levels run the optimal parser, whose ~64 KB table sits on the 16 KB kernel stack (`LZ4HC_HEAPMODE` is 0 without malloc), and f2fs passes its `compress_algorithm=lz4:<level>` mount level straight through. LZ4 1.8.3 had no optimal parser. `LZ4HC_compress_optimal()` is `noinline`, so full LTO cannot fold its frame into the reachable HC path. `-Wframe-larger-than` still warns for it (66 KB, unreachable) and for `LZ4_compress_destSize` (16 KB, no caller).
+- `LZ4HC_MIN_CLEVEL`/`LZ4HC_MAX_CLEVEL` stay 3/16 (LZ4 1.10 uses 2/12): f2fs rejects mount levels outside them, so an existing `lz4:13` to `lz4:16` mount option keeps working.
+- Regenerate: take arter97's `lib/lz4` and `include/linux/lz4.h`, re-add the clamp, and write the patch header followed by `git diff --no-renames <base> HEAD -- lib/lz4 include/linux/lz4.h`.
+
+**R3** — `patches/rcu-lazy` (input `rcu_lazy`, default `true`) backports lazy RCU: `call_rcu()` callbacks are batched for up to 10 s, so idle CPUs wake less often. `call_rcu_hurry()` keeps the old timing for callers that wait on a callback. `build_kernel.sh` sets `CONFIG_RCU_LAZY=y` and appends `rcu_nocbs=0-7` to `CONFIG_CMDLINE`, because lazy callbacks queue only on offloaded CPUs, the SM8475 has CPUs 0–7, and the Pong bootconfig offloads none. The build fails if either is missing from `out/.config`.
+
+- 0001–0005, 0010: the ACK `android13-5.10` backport that arter97 carries but never enables, with `call_rcu_flush()` renamed to the upstream `call_rcu_hurry()`.
+- 0006–0009, 0011–0015: upstream `call_rcu_hurry()` conversions for percpu-refcount, rcu_sync, SCSI error handling (UFS), dst, `queue_rcu_work()`, nexthop and fib_info, IPv6 anycast, `inet_free_ifa()` and `fib6_info_release()`.
+- 0016–0019: upstream fixes to the lazy shrinker and bypass locking.
+- 0020, 0021: local, not upstream. They fix gaps of the ACK backport on the 5.10 per-CPU `nocb_timer`: a LAZY to WAKE upgrade that did not re-arm the timer, `wake_nocb_gp_defer()` running without `->nocb_lock`, a bypass timer that could turn into a 10 s lazy deferral, and a LAZY level left without a timer when the `nocb_gp_wait()` bypass reset (which holds a follower's lock, not the leader's) deletes it. The tick never rescues a LAZY level, so 0021 re-arms the timer whenever the level is LAZY and none is pending.
+- Left out: upstream fixes that need code 5.10 lacks (runtime de-offload, the per-group `rdp_gp` timer, `shrinker_alloc`) or target code not built here (rxrpc, the io_uring eventfd path).
+- Verified 2026-10-14 (`LTO_NONE`, vanilla tree): no rejects on `lineage-23.2` + §L, on that plus `patches/lz4`, and on `sm8475/b/mr`; the SUSFS 50_ patch still applies afterwards; 0 exports removed, 0 CRCs changed, 3 added (`call_rcu_hurry`, `rcu_lazy_get_jiffies_till_flush`, `rcu_lazy_set_jiffies_till_flush`); no warnings in touched files.
+- Code compiled into `Image` only by CI (SukiSU `builtin`, SUSFS, BBG) uses `kfree_rcu()` and `synchronize_rcu()`, neither of which waits on a lazy callback.
+- Runtime risk: the ROM's vendor modules are not rebuilt, so their `call_rcu()` calls become lazy. A vendor driver that blocks on its own RCU callback would stall up to 10 s. Laziness is off while grace periods are expedited, so a ROM that keeps `rcu_expedited=1` after boot gains nothing. On the boot test, check suspend/resume, Wi-Fi and network switches, and `dmesg` for hung-task or RCU stall reports; dispatch with `rcu_lazy=false` to compare.
+
+**R4** — CI patch order: `extra_patches_dir`, `patches/lz4`, `patches/rcu-lazy`, SUSFS, BBG, Droidspaces. A `kernel_repo` of `arter97/android_kernel_nothing_sm8475` skips both directories and forces `rcu_lazy` off: that tree already carries LZ4 1.10 and the ACK part of the lazy RCU series, so the patches would fail, and its `CONFIG_RCU_LAZY` lacks the fixes above.
+
 ## §T — Task History
 
 - [x] T1: Add GitHub Release step to `build.yml` (workflow_dispatch only, softprops/action-gh-release@v2)
@@ -191,4 +224,9 @@ Not verified locally: the KernelSU/SUSFS/BBG/KPM build and the full-LTO link (CI
 - [x] T23: Fix `ld.lld: error: undefined symbol: ksu_install_su_fd` (run 35168531820). The susfs pin has to be paired with the SukiSU revision, not merely current: susfs's kernel-side patch calls into symbols its own KernelSU-side patch defines, and `builtin` substitutes its own integration for that patch. Moved the pin from `f2878eb5` back one commit to `18fe1544` — same SUSFS v2.3.0, still applies cleanly to `lineage-23.2`, and all 9 `ksu_*` symbols it expects are defined by the pinned `builtin` tree. Bumping either pin alone can break the link; bump them together and re-check the extern list
 - [x] T24: Bump SukiSU `builtin` `b20dee70` → `6c284e95` and SUSFS `18fe1544` → `14c45388` together (see T23), upload-artifact v7.0.1 → v7.0.2. SUSFS gains 26 fixes (`clone_mnt()` race, NULL deref, dangling `nd->name`, leaks, SUS_KSTAT spoofing). Its tip patch adds one new extern, `ksu_handle_post_execveat_sucompat`, absent from the old `builtin` pin; the new pin defines it, and `ksu_install_su_fd`, which unblocks the SUSFS tip. Do not pin `builtin` commits from 2026-10-05 to 2026-10-08: they miss `kernel/arch.h` and do not build. The 50_ patch applies with no fuzz to `lineage-23.2` and `sm8475/b/mr`. Manager-facing delta checked against v4.2.0: `KSU_VERSION` logic unchanged, uapi still 2 (`EVENT_SERVICES` added only), and the stricter v2-only APK signature check accepts the v4.2.0 APK (blocks `0x7109871a` + padding). Added the `Check manager alignment` step (V6)
 - [x] T25: Backport LineageOS `lineage-23.2` from 5.10.246 to 5.10.269 by vendoring a merge of ACK GKI release `android12-5.10.269_r00` as `patches/lineage-lts`, the new `extra_patches_dir` default (`build-all.yml` LineageOS job only) — see §L
+- [x] T27: Performance feasibility study for an `Image`-only flash, and LZ4 v1.10.0 on every build — see §R1, §R2
+- [x] T28: Lazy RCU behind `rcu_lazy` (default on) — see §R3
+- [ ] T29: Newer pinned clang in CI (Ubuntu clang 18 today; arter97 builds with LLVM 22.1). Re-verify the full-LTO link and 5.10 CFI
+- [ ] T30: `-O3` (arter97 `fa38a5b0b` unlocks `CC_OPTIMIZE_FOR_PERFORMANCE_O3`). Gain unmeasured
+- [ ] T31: LZ4 arm64 NEON decompression (`lz4armv8`, `xingguangcuican6666/ABK` `zram/lz4/lz4armv8`). Only if a benchmark on top of R2 shows a gain
 - [x] T26: Security check before merging the 5.10.269 backport (zizmor 1.30.1, actionlint 1.7.12, shellcheck 0.11.0, kernel CVE delta). Fixed: checkout no longer persists the token, `actions: write` dropped, `patch_linux` checked against its sha256, releases published from a separate `release` job so the build runs with a read-only token (V9, V12). Deferred as low risk: dispatch inputs expanded into `run:` scripts and the ccache restore in release runs, since only users with write access can trigger either workflow

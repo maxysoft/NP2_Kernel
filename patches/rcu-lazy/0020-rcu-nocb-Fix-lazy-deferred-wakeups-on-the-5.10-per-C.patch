@@ -1,0 +1,93 @@
+From 896cfe548f6949d0057d3d75d0997714c72c74d0 Mon Sep 17 00:00:00 2001
+From: "Tomas E. Todorov" <t.todorov@tacocrypto.io>
+Date: Wed, 14 Oct 2026 00:15:21 +0200
+Subject: [PATCH 20/20] rcu/nocb: Fix lazy deferred wakeups on the 5.10 per-CPU
+ nocb_timer
+
+The lazy RCU backport keeps the 5.10 layout, where every rcu_data has
+its own ->nocb_timer and ->nocb_bypass_timer, while upstream uses one
+->nocb_timer per rcuog group guarded by ->nocb_gp_lock. Three spots
+did not carry over:
+
+1. wake_nocb_gp_defer() re-armed ->nocb_timer only from
+   RCU_NOCB_WAKE_NOT. An RCU_NOCB_WAKE or RCU_NOCB_WAKE_FORCE request
+   that arrives while a lazy deferral is pending raised the level but
+   left the timer up to 10 seconds out. Re-arm it for every non-lazy
+   request below RCU_NOCB_WAKE, as upstream does, and keep a second
+   lazy request from shortening the pending lazy timer.
+
+2. The lazy paths called wake_nocb_gp_defer() without ->nocb_lock:
+   __call_rcu_nocb_wake() after dropping it, nocb_gp_wait() for the
+   rcuog's own rdp. Every other writer of ->nocb_defer_wakeup holds
+   that lock, so an interrupt or a concurrent rcuog pass could
+   overwrite a pending RCU_NOCB_WAKE with RCU_NOCB_WAKE_LAZY and delay
+   a call_rcu_hurry() callback by up to 10 seconds (the race that
+   upstream commit 463d46044f04 fixes for the per-group timer).
+   Upstream takes ->nocb_gp_lock inside wake_nocb_gp_defer(); here,
+   call it with ->nocb_lock held.
+
+3. do_nocb_bypass_wakeup_timer() went through __call_rcu_nocb_wake(),
+   which now turns into a lazy deferral when the rcuog's own rdp holds
+   only lazy callbacks. The timer is armed because some rdp in the
+   group holds non-lazy bypass callbacks, so those then waited up to
+   10 seconds. Wake the rcuog directly, as upstream's
+   RCU_NOCB_WAKE_BYPASS deferral does.
+
+Fixes: 3cb278e73be5 ("rcu: Make call_rcu() lazy to save power")
+---
+ kernel/rcu/tree_plugin.h | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/kernel/rcu/tree_plugin.h b/kernel/rcu/tree_plugin.h
+index 954ce01918be..53f99ca5948d 100644
+--- a/kernel/rcu/tree_plugin.h
++++ b/kernel/rcu/tree_plugin.h
+@@ -1707,7 +1707,8 @@ static void wake_nocb_gp_defer(struct rcu_data *rdp, int waketype,
+ 		mod_timer(&rdp->nocb_timer, jiffies + jiffies_till_flush);
+ 		WRITE_ONCE(rdp->nocb_defer_wakeup, waketype);
+ 	} else {
+-		if (rdp->nocb_defer_wakeup == RCU_NOCB_WAKE_NOT)
++		if (waketype != RCU_NOCB_WAKE_LAZY &&
++		    rdp->nocb_defer_wakeup < RCU_NOCB_WAKE)
+ 			mod_timer(&rdp->nocb_timer, jiffies + 1);
+ 		if (rdp->nocb_defer_wakeup < waketype)
+ 			WRITE_ONCE(rdp->nocb_defer_wakeup, waketype);
+@@ -1971,9 +1972,9 @@ static void __call_rcu_nocb_wake(struct rcu_data *rdp, bool was_alldone,
+ 		rdp->qlen_last_fqs_check = len;
+ 		// Only lazy CBs in bypass list
+ 		if (lazy_len && bypass_len == lazy_len) {
+-			rcu_nocb_unlock_irqrestore(rdp, flags);
+ 			wake_nocb_gp_defer(rdp, RCU_NOCB_WAKE_LAZY,
+ 					   TPS("WakeLazy"));
++			rcu_nocb_unlock_irqrestore(rdp, flags);
+ 		} else if (!irqs_disabled_flags(flags)) {
+ 			/* ... if queue was empty ... */
+ 			wake_nocb_gp(rdp, false, flags);
+@@ -2017,7 +2018,7 @@ static void do_nocb_bypass_wakeup_timer(struct timer_list *t)
+ 	trace_rcu_nocb_wake(rcu_state.name, rdp->cpu, TPS("Timer"));
+ 	rcu_nocb_lock_irqsave(rdp, flags);
+ 	smp_mb__after_spinlock(); /* Timer expire before wakeup. */
+-	__call_rcu_nocb_wake(rdp, true, flags);
++	wake_nocb_gp(rdp, false, flags);
+ }
+ 
+ /*
+@@ -2140,8 +2141,10 @@ static void nocb_gp_wait(struct rcu_data *my_rdp)
+ 	if (!rcu_nocb_poll) {
+ 		// If bypass list only has lazy CBs. Add a deferred lazy wake up.
+ 		if (lazy && !bypass) {
++			rcu_nocb_lock_irqsave(my_rdp, flags);
+ 			wake_nocb_gp_defer(my_rdp, RCU_NOCB_WAKE_LAZY,
+ 					TPS("WakeLazyIsDeferred"));
++			rcu_nocb_unlock_irqrestore(my_rdp, flags);
+ 		// Otherwise add a deferred bypass wake up.
+ 		} else if (bypass) {
+ 			// At least one child with non-empty ->nocb_bypass, so set
+@@ -2149,7 +2152,6 @@ static void nocb_gp_wait(struct rcu_data *my_rdp)
+ 			raw_spin_lock_irqsave(&my_rdp->nocb_gp_lock, flags);
+ 			mod_timer(&my_rdp->nocb_bypass_timer, j + 2);
+ 			raw_spin_unlock_irqrestore(&my_rdp->nocb_gp_lock, flags);
+-			
+ 		}
+ 	}
+ 	if (rcu_nocb_poll) {

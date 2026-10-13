@@ -1,6 +1,17 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
+## v3.2.0 - LZ4 1.10 and lazy RCU (unreleased)
+
+### New
+- **LZ4 1.10.0.** zram swap and the erofs `/vendor` partitions use the kernel's LZ4 library, now LZ4 v1.10.0 instead of 1.8.3, as adapted by arter97 for the Nothing Phone 2. arter97 measured 3.8% faster zram. Both the LineageOS and NothingOSS builds get it.
+- **Lazy RCU, on by default.** The kernel batches deferred memory frees for up to 10 seconds instead of waking an idle CPU for each one, to save power when the phone is idle. Code that waits for those frees (SCSI/UFS error handling, networking, workqueues, per-CPU reference counts) still gets them right away. Run the workflow with `rcu_lazy` off to build without it.
+
+### Notes
+- f2fs LZ4HC compression levels 10 and above now compress like level 9, which avoids a kernel stack overflow. Levels 13–16 are still accepted as mount options. The phone's default setup does not use f2fs compression.
+- Neither change touches the vendor module interface, so the ROM's modules keep loading.
+- If the phone stalls after suspend, Wi-Fi changes or app switches, rebuild with `rcu_lazy` off and report it.
+
 ## v3.1.0 - Linux 5.10.269 (Oct.13 2026)
 
 ### New

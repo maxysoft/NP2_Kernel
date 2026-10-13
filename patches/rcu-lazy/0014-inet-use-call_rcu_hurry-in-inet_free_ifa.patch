@@ -1,0 +1,46 @@
+From 6de74e16559a6c1b1665c4057b39e35483978b8a Mon Sep 17 00:00:00 2001
+From: Eric Dumazet <edumazet@google.com>
+Date: Fri, 26 Apr 2024 07:02:02 +0000
+Subject: [PATCH 14/20] inet: use call_rcu_hurry() in inet_free_ifa()
+
+This is a followup of commit c4e86b4363ac ("net: add two more
+call_rcu_hurry()")
+
+Our reference to ifa->ifa_dev must be freed ASAP
+to release the reference to the netdev the same way.
+
+inet_rcu_free_ifa()
+
+	in_dev_put()
+	 -> in_dev_finish_destroy()
+	   -> netdev_put()
+
+This should speedup device/netns dismantles when CONFIG_RCU_LAZY=y
+
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Reviewed-by: David Ahern <dsahern@kernel.org>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+(cherry picked from commit 61f5338d62673379ff2ce5a8c05682658a196980)
+Backport notes: context differs: 5.10 inet_rcu_free_ifa() lacks the blank line upstream adds; only inet_free_ifa() changed.
+---
+ net/ipv4/devinet.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/net/ipv4/devinet.c b/net/ipv4/devinet.c
+index bf8597814519..a642703ea190 100644
+--- a/net/ipv4/devinet.c
++++ b/net/ipv4/devinet.c
+@@ -228,7 +228,11 @@ static void inet_rcu_free_ifa(struct rcu_head *head)
+ 
+ static void inet_free_ifa(struct in_ifaddr *ifa)
+ {
+-	call_rcu(&ifa->rcu_head, inet_rcu_free_ifa);
++	/* Our reference to ifa->ifa_dev must be freed ASAP
++	 * to release the reference to the netdev the same way.
++	 * in_dev_put() -> in_dev_finish_destroy() -> netdev_put()
++	 */
++	call_rcu_hurry(&ifa->rcu_head, inet_rcu_free_ifa);
+ }
+ 
+ void in_dev_finish_destroy(struct in_device *idev)

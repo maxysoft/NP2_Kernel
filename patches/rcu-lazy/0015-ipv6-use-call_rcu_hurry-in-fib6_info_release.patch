@@ -1,0 +1,39 @@
+From f780430df562533940e63a086f36f0a39f52b3c4 Mon Sep 17 00:00:00 2001
+From: Eric Dumazet <edumazet@google.com>
+Date: Fri, 26 Apr 2024 10:47:22 +0000
+Subject: [PATCH 15/20] ipv6: use call_rcu_hurry() in fib6_info_release()
+
+This is a followup of commit c4e86b4363ac ("net: add two more
+call_rcu_hurry()")
+
+fib6_info_destroy_rcu() is calling nexthop_put() or fib6_nh_release()
+
+We must not delay it too much or risk unregister_netdevice/ref_tracker
+traces because references to netdev are not released in time.
+
+This should speedup device/netns dismantles when CONFIG_RCU_LAZY=y
+
+Signed-off-by: Eric Dumazet <edumazet@google.com>
+Reviewed-by: Jiri Pirko <jiri@nvidia.com>
+Reviewed-by: David Ahern <dsahern@kernel.org>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+
+(cherry picked from commit b5327b9a300e2ecec1372ed375615f39e3df0542)
+Backport notes: 5.10 fib6_info_release() has no DEBUG_NET_WARN_ON_ONCE() line or braces; same one-line change.
+---
+ include/net/ip6_fib.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/net/ip6_fib.h b/include/net/ip6_fib.h
+index 4eae9fb5720a..aa4c8225746e 100644
+--- a/include/net/ip6_fib.h
++++ b/include/net/ip6_fib.h
+@@ -343,7 +343,7 @@ static inline bool fib6_info_hold_safe(struct fib6_info *f6i)
+ static inline void fib6_info_release(struct fib6_info *f6i)
+ {
+ 	if (f6i && refcount_dec_and_test(&f6i->fib6_ref))
+-		call_rcu(&f6i->rcu, fib6_info_destroy_rcu);
++		call_rcu_hurry(&f6i->rcu, fib6_info_destroy_rcu);
+ }
+ 
+ static inline void fib6_info_hw_flags_set(struct fib6_info *f6i, bool offload,
