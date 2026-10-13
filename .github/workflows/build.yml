@@ -1,7 +1,7 @@
 name: Build NP2 Kernel
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   workflow_dispatch:
@@ -127,6 +127,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    outputs:
+      build_date: ${{ steps.date.outputs.build_date }}
+      manager: ${{ steps.manager.outputs.manager }}
     env:
       KERNEL_DIR: kernel
       ANYKERNEL_DIR: AnyKernel3
@@ -161,7 +164,11 @@ jobs:
 
       - name: Set build date
         # Colon-free ISO 8601 (UTC) — colons are invalid in filenames on FAT/exFAT/NTFS
-        run: echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H-%M-%SZ')" >> "$GITHUB_ENV"
+        id: date
+        run: |
+          d=$(date -u +'%Y-%m-%dT%H-%M-%SZ')
+          echo "BUILD_DATE=$d" >> "$GITHUB_ENV"
+          echo "build_date=$d" >> "$GITHUB_OUTPUT"
 
       - name: Configure ccache
         run: |
@@ -255,6 +262,7 @@ jobs:
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
 
       - name: Check manager alignment
+        id: manager
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -271,7 +279,7 @@ jobs:
             echo "::error::Driver does not match stable manager $tag. Set KSU_VERSION in MAKE_ARGS to its version code and pin a SukiSU builtin revision with the same uapi version (SPEC V6)."
             exit 1
           fi
-          echo "SUKISU_MANAGER=$tag ($mgr_code)" >> "$GITHUB_ENV"
+          echo "manager=$tag ($mgr_code)" >> "$GITHUB_OUTPUT"
 
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
@@ -379,22 +387,6 @@ jobs:
           path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
           retention-days: 30
 
-      - name: Create GitHub Release
-        # Under workflow_call, github.event_name is the caller's event, so it cannot tell a direct dispatch from build-all.yml.
-        if: ${{ !inputs.skip_release }}
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          tag_name: "${{ inputs.kernel_type || 'LineageOS' }}-${{ github.run_number }}"
-          name: "NP2 Kernel – ${{ inputs.kernel_type || 'LineageOS' }} #${{ github.run_number }}"
-          body: |
-            **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
-            **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
-            **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}
-            **Manager:** SukiSU-Ultra ${{ env.SUKISU_MANAGER }} — install this manager version, or it reports a driver version mismatch.
-          files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
-          draft: false
-          prerelease: false
-
       - name: Upload .config for debugging
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -424,3 +416,32 @@ jobs:
         with:
           name: rej-NP2-SukiSU-Ultra
           path: rej/
+
+  release:
+    needs: build
+    # Under workflow_call, github.event_name is the caller's event, so it cannot tell a direct dispatch from build-all.yml.
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      ZIP: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ needs.build.outputs.build_date }}
+    steps:
+      - name: Download kernel zip
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.ZIP }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: "${{ inputs.kernel_type || 'LineageOS' }}-${{ github.run_number }}"
+          name: "NP2 Kernel – ${{ inputs.kernel_type || 'LineageOS' }} #${{ github.run_number }}"
+          body: |
+            **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
+            **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
+            **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}
+            **Manager:** SukiSU-Ultra ${{ needs.build.outputs.manager }} — install this manager version, or it reports a driver version mismatch.
+          files: "${{ env.ZIP }}.zip"
+          draft: false
+          prerelease: false
