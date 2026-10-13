@@ -218,20 +218,18 @@ jobs:
       - name: Clone SUSFS
         if: ${{ inputs.susfs_support == true }}
         run: |
-          # Pinned: SUSFS v2.3.0 @ 18fe154470de (2026-09-06). The branch carries no
+          # Pinned: SUSFS v2.3.0 @ 14c45388ec8c (2026-10-12). The branch carries no
           # current tag (only 1.4.2-gki-android13-5.10 from 2024), so the SHA is the pin.
           # Full clone, not --depth=1: a shallow clone cannot check out a non-tip commit.
           #
-          # Deliberately NOT the branch tip. The very next commit (f2878eb5) adds a call
-          # to ksu_install_su_fd() in the kernel-side patch, and that symbol is supplied
-          # only by susfs's own KernelSU-side patch — which SukiSU's `builtin` tree
-          # replaces and does not define. Run 35168531820 died on exactly that:
+          # Paired with the SukiSU `builtin` pin below: the kernel-side patch calls ksu_*
+          # symbols (e.g. ksu_handle_post_execveat_sucompat) that only a matching builtin
+          # tree defines. Bump both pins together, or the link fails as run 35168531820 did:
           #   ld.lld: error: undefined symbol: ksu_install_su_fd
-          # Every ksu_* symbol this revision needs IS defined by the pinned builtin tree.
           branch="${{ inputs.susfs_branch || 'gki-android13-5.10' }}"
           git clone -b "$branch" https://gitlab.com/simonpunk/susfs4ksu.git
           if [ "$branch" = "gki-android13-5.10" ]; then
-            git -C susfs4ksu checkout 18fe154470de0f40e2d90a36c23b1d2e544a9517
+            git -C susfs4ksu checkout 14c45388ec8cb3ca72f2ac8bf83097b9285a8418
           else
             echo "Non-default SUSFS branch '$branch' — no pin available, tracking tip"
           fi
@@ -239,7 +237,7 @@ jobs:
       - name: Setup SukiSU-Ultra
         run: |
           cd "$KERNEL_DIR"
-          # Pinned: SukiSU-Ultra `builtin` branch @ b20dee702035 (2026-09-13).
+          # Pinned: SukiSU-Ultra `builtin` branch @ 6c284e957fea (2026-10-09).
           # Deliberately NOT a release tag. v4.2.0, main and dev declare no KSU_SUSFS
           # symbol at all, so `CONFIG_KSU_SUSFS=y` was silently dropped by olddefconfig
           # and SUSFS compiled out of every build. `builtin` is the SUSFS-integrated
@@ -247,9 +245,28 @@ jobs:
           # fs/susfs.c + include/linux/susfs.h from the susfs4ksu patch below.
           # setup.sh is fetched at the same commit; it swallows a failed checkout
           # ("git checkout ... || echo"), so the ref is verified afterwards.
-          SUKISU_REV=b20dee702035af09cb2ecb5f35443bbc1747f3e6
+          SUKISU_REV=6c284e957feaa9a388a9f1c37dc4ec80d95e434b
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
+
+      - name: Check manager alignment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rel=$(gh api repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest)
+          tag=$(jq -r .tag_name <<<"$rel")
+          mgr_code=$(jq -r '.assets[].name' <<<"$rel" | sed -nE 's/^SukiSU_v[0-9.]+_([0-9]+)-release\.apk$/\1/p')
+          mgr_hdr=$(gh api -H 'Accept: application/vnd.github.raw' "repos/SukiSU-Ultra/SukiSU-Ultra/contents/uapi/supercall.h?ref=$tag")
+          mgr_uapi=$(sed -nE 's/.*KERNEL_SU_UAPI_VERSION[^0-9]+([0-9]+).*/\1/p' <<<"$mgr_hdr")
+          drv_code=$(sed -nE 's/.*KSU_VERSION=([0-9]+).*/\1/p' <<<"$MAKE_ARGS")
+          drv_uapi=$(sed -nE 's/.*KERNEL_SU_UAPI_VERSION[^0-9]+([0-9]+).*/\1/p' "$KERNEL_DIR/KernelSU/kernel/include/uapi/supercall.h")
+          echo "Stable manager $tag: version ${mgr_code:-?}, uapi ${mgr_uapi:-?}"
+          echo "Driver: version ${drv_code:-?}, uapi ${drv_uapi:-?}"
+          if [ -z "$mgr_code" ] || [ "$mgr_code" != "$drv_code" ] || [ -z "$mgr_uapi" ] || [ "$mgr_uapi" != "$drv_uapi" ]; then
+            echo "::error::Driver does not match stable manager $tag. Set KSU_VERSION in MAKE_ARGS to its version code and pin a SukiSU builtin revision with the same uapi version (SPEC V6)."
+            exit 1
+          fi
+          echo "SUKISU_MANAGER=$tag ($mgr_code)" >> "$GITHUB_ENV"
 
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
@@ -298,7 +315,7 @@ jobs:
           # free on LineageOS sm8475; slot 1 is used by pf_io_worker so 1_2_3 would bootloop)
           # plus the POSIX_MQUEUE padding fix mandatory for kernels <= 5.10.
           # Vendored from ravindu644/Droidspaces-OSS @ 4106757e0f72 (2026-04-22, still
-          # current as of upstream release v6.5.5) — verified identical to upstream.
+          # current as of upstream release v6.6.0) — verified identical to upstream.
           patch_dir="$GITHUB_WORKSPACE/patches/droidspaces"
           if [ ! -d "$patch_dir" ]; then
             echo "Droidspaces patches dir not found: $patch_dir" >&2
@@ -346,7 +363,7 @@ jobs:
           Scripts/package_anykernel.sh
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}
           path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
@@ -362,13 +379,14 @@ jobs:
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
             **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}
+            **Manager:** SukiSU-Ultra ${{ env.SUKISU_MANAGER }} — install this manager version, or it reports a driver version mismatch.
           files: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
           draft: false
           prerelease: false
 
       - name: Upload .config for debugging
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: config-NP2-SukiSU-Ultra
           path: kernel/out/.config
@@ -391,7 +409,7 @@ jobs:
 
       - name: Upload .rej files
         if: always() && steps.collect_rej.outputs.found == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: rej-NP2-SukiSU-Ultra
           path: rej/
