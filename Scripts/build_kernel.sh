@@ -150,24 +150,9 @@ make -j"${JOBS}" ${MAKE_ARGS} Image KCFLAGS="-Wno-error"
 
 if [ "${KPM_SUPPORT}" = "true" ]; then
   cd out/arch/arm64/boot/
-  python3 - <<'PY'
-import json
-import sys
-import urllib.request
-
-# Pinned: 0.13.0 (2026-01-30) — avoid silent breakage from unvetted patcher updates
-url = "https://api.github.com/repos/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/tags/0.13.0"
-with urllib.request.urlopen(url) as resp:
-  data = json.load(resp)
-
-assets = data.get("assets", [])
-match = next((a["browser_download_url"] for a in assets if "patch_linux" in a.get("name", "")), None)
-if not match:
-  print("ERROR: patch_linux asset not found", file=sys.stderr)
-  sys.exit(1)
-
-urllib.request.urlretrieve(match, "patch_linux")
-PY
+  # The 0.13.0 tag is mutable; the checksum is the real pin.
+  curl -fsSLo patch_linux https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.13.0/patch_linux
+  echo "ea4884140c0ee8835bc79b67e4c9b46094c6640d6407f0aab34d2df4e28e0450  patch_linux" | sha256sum -c -
   chmod +x ./patch_linux
   ./patch_linux
   rm -f ./Image
