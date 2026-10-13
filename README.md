@@ -29,6 +29,8 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 
 > **Backup your stock boot image first.** Bootloader must be unlocked. Use at your own risk.
 
+To check the installed version, run `cat /proc/version`. Settings can show an older version when SUSFS uname spoofing is set.
+
 ## Build it yourself
 
 1. Fork this repo
