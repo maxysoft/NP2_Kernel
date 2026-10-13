@@ -119,6 +119,10 @@ on:
         required: false
         type: string
         default: 'LineageOS'
+      skip_release:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   build:
@@ -370,7 +374,8 @@ jobs:
           retention-days: 30
 
       - name: Create GitHub Release
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+        # Under workflow_call, github.event_name is the caller's event, so it cannot tell a direct dispatch from build-all.yml.
+        if: ${{ !inputs.skip_release }}
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: "${{ inputs.kernel_type || 'LineageOS' }}-${{ github.run_number }}"
