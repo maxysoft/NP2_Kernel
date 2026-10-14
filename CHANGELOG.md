@@ -1,7 +1,7 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
-## v3.2.0 - LZ4 1.10 and lazy RCU (unreleased)
+## v3.2.0 - LZ4 1.10 and lazy RCU (Oct.14 2026)
 
 ### New
 - **LZ4 1.10.0.** zram swap and the erofs `/vendor` partitions use the kernel's LZ4 library, now LZ4 v1.10.0 instead of 1.8.3, as adapted by arter97 for the Nothing Phone 2. arter97 measured 3.8% faster zram. Both the LineageOS and NothingOSS builds get it.
