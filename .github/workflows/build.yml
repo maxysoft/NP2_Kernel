@@ -153,7 +153,8 @@ jobs:
       # build time from a live `api.github.com/.../commits?sha=main` count, so the SHA
       # pin does NOT control it: builds reported 40922 (main's count) while the manager
       # app reports 40900, producing "manager version and kernelsu driver version
-      # mismatch!" on device. This value must equal the manager's version code.
+      # mismatch!" on device. This value must equal the version code of MGR_TAG in
+      # the "Check manager alignment" step.
       MAKE_ARGS: >-
         ARCH=arm64
         CROSS_COMPILE=aarch64-linux-gnu-
@@ -274,19 +275,24 @@ jobs:
         id: manager
         env:
           GH_TOKEN: ${{ github.token }}
+          MGR_TAG: v4.2.0
         run: |
-          rel=$(gh api repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest)
+          rel=$(gh api "repos/SukiSU-Ultra/SukiSU-Ultra/releases/tags/$MGR_TAG")
           tag=$(jq -r .tag_name <<<"$rel")
           mgr_code=$(jq -r '.assets[].name' <<<"$rel" | sed -nE 's/^SukiSU_v[0-9.]+_([0-9]+)-release\.apk$/\1/p')
           mgr_hdr=$(gh api -H 'Accept: application/vnd.github.raw' "repos/SukiSU-Ultra/SukiSU-Ultra/contents/uapi/supercall.h?ref=$tag")
           mgr_uapi=$(sed -nE 's/.*KERNEL_SU_UAPI_VERSION[^0-9]+([0-9]+).*/\1/p' <<<"$mgr_hdr")
           drv_code=$(sed -nE 's/.*KSU_VERSION=([0-9]+).*/\1/p' <<<"$MAKE_ARGS")
           drv_uapi=$(sed -nE 's/.*KERNEL_SU_UAPI_VERSION[^0-9]+([0-9]+).*/\1/p' "$KERNEL_DIR/KernelSU/kernel/include/uapi/supercall.h")
-          echo "Stable manager $tag: version ${mgr_code:-?}, uapi ${mgr_uapi:-?}"
+          echo "Pinned manager $tag: version ${mgr_code:-?}, uapi ${mgr_uapi:-?}"
           echo "Driver: version ${drv_code:-?}, uapi ${drv_uapi:-?}"
           if [ -z "$mgr_code" ] || [ "$mgr_code" != "$drv_code" ] || [ -z "$mgr_uapi" ] || [ "$mgr_uapi" != "$drv_uapi" ]; then
-            echo "::error::Driver does not match stable manager $tag. Set KSU_VERSION in MAKE_ARGS to its version code and pin a SukiSU builtin revision with the same uapi version (SPEC V6)."
+            echo "::error::Driver does not match pinned manager $tag. Set KSU_VERSION in MAKE_ARGS to its version code and pin a SukiSU builtin revision with the same uapi version (SPEC V6)."
             exit 1
+          fi
+          latest=$(gh api repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest --jq .tag_name)
+          if [ "$latest" != "$tag" ]; then
+            echo "::warning::SukiSU-Ultra $latest is out; this build still targets manager $tag. Bump MGR_TAG, KSU_VERSION and the builtin pin together once builtin's uapi version matches $latest (SPEC V6)."
           fi
           echo "manager=$tag ($mgr_code)" >> "$GITHUB_OUTPUT"
 
@@ -464,7 +470,7 @@ jobs:
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
             **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}  **Lazy RCU:** ${{ inputs.rcu_lazy && !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
-            **Manager:** SukiSU-Ultra ${{ needs.build.outputs.manager }} — install this manager version, or it reports a driver version mismatch.
+            **Manager:** SukiSU-Ultra ${{ needs.build.outputs.manager }} — install exactly this manager version. A newer manager may not work with this kernel.
           files: "${{ env.ZIP }}.zip"
           draft: false
           prerelease: false

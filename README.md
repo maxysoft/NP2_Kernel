@@ -27,7 +27,7 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 1. Download the Kernel zip variant you want from [Releases](https://github.com/maxysoft/NP2_Kernel/releases)
 2. Boot into recovery (TWRP / OrangeFox)
 3. Flash the zip → reboot
-4. Install the [SukiSU Ultra Manager](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases) to manage root
+4. Install the [SukiSU Ultra Manager](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases) version named in the release notes to manage root. A newer manager may not work with the kernel.
 
 > **Backup your stock boot image first.** Bootloader must be unlocked. Use at your own risk.
 

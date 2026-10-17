@@ -1,6 +1,12 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
+## Unreleased
+
+### Notes
+- Keep the SukiSU-Ultra manager at **v4.2.0**. Do not update to v4.2.1 yet. It needs uapi version 5, and SukiSU's SUSFS-capable `builtin` branch still has uapi 2. On this kernel, v4.2.1 hides the Superuser and Module tabs and shows "Kernel update required".
+- The build checks the driver against manager v4.2.0 instead of the latest SukiSU release. It warns when a newer manager is out.
+
 ## v3.2.0 - LZ4 1.10 and lazy RCU (Oct.14 2026)
 
 ### New
