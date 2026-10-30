@@ -7,6 +7,7 @@
 - **Release #22 did not boot.** The phone went straight to Qualcomm CrashDump Mode, and recovery crashed too. Cause: `patch_linux` 0.14.0 embeds a 16-byte stub instead of the KernelPatch image, and it pointed the kernel's first instruction past the end of `Image`. KPM is now patched with `kptools-linux` and the `kpimg` from the same 0.14.0 release, and the build fails unless `kptools-linux -l` shows a patched image with kpimg `0xe00`.
 
 ### New
+- **Crash logs are kept.** Flashing the zip installs `pstore-archive.sh` as a KernelSU `post-fs-data.d` script (from recovery only when `/data` is decrypted). At every boot it copies the previous boot's logs from `/sys/fs/pstore` into a new folder in `/data/adb/pstore/` and keeps the last 20 boots. See the README.
 - **LineageOS kernel updated from 5.10.269 to 5.10.270.** The LineageOS build now applies Google's `android12-5.10.270_r00` GKI release (`a5829f70a566`, KMI generation 9) on top of LineageOS's `lineage-23.2` kernel. The NothingOSS build is not affected.
 - 80 published CVEs in code built into the kernel are fixed compared with 5.10.269. The list, with the ones still open, is in [docs/cve-5.10.270.md](docs/cve-5.10.270.md). Examples:
   - CVE-2026-89783: xfrm6: fix out-of-bounds write in xfrm6_input_addr() when secpath is full

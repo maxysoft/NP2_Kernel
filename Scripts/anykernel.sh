@@ -27,4 +27,12 @@ PATCH_VBMETA_FLAG=auto;
 ## AnyKernel boot install
 split_boot;
 flash_boot;
+
+if [ -d /data/adb ]; then
+  mkdir -p /data/adb/post-fs-data.d;
+  cp -f $AKHOME/pstore-archive.sh /data/adb/post-fs-data.d/;
+  chmod 755 /data/adb/post-fs-data.d/pstore-archive.sh;
+else
+  ui_print " " "/data/adb not found: crash-log archiver not installed.";
+fi;
 ## end boot install

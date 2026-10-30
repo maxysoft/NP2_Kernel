@@ -10,6 +10,7 @@ cp "${KERNEL_DIR}/out/arch/arm64/boot/Image" "${ANYKERNEL_DIR}/"
 cp "${KERNEL_DIR}/out/arch/arm64/boot/Image.gz" "${ANYKERNEL_DIR}/" 2>/dev/null || true
 
 cp Scripts/anykernel.sh "${ANYKERNEL_DIR}/anykernel.sh"
+cp Scripts/pstore-archive.sh "${ANYKERNEL_DIR}/"
 
 cd "${ANYKERNEL_DIR}"
 KERNEL_TYPE="${KERNEL_TYPE:-LineageOS}"

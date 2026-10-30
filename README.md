@@ -21,6 +21,7 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 - **LZ4 1.10**: newer LZ4 library for zram and erofs, from [arter97's Nothing Phone 2 kernel](https://github.com/arter97/android_kernel_nothing_sm8475). See `SPEC.md` §R
 - **Lazy RCU** (on by default, `rcu_lazy` workflow input): the kernel batches deferred frees so idle CPUs wake less often. See `SPEC.md` §R
 - **Linux 5.10.270** (LineageOS build only): upstream LTS fixes from Google's `android12-5.10.270_r00` GKI release, merged onto LineageOS's 5.10.246 kernel. See `SPEC.md` §L
+- **Crash-log archiver**: keeps the kernel and Android logs of the last 20 boots in `/data/adb/pstore`, so you can read why the phone crashed or rebooted after the next good boot. See [Crash logs](#crash-logs)
 
 ## Install
 
@@ -42,6 +43,44 @@ Recovery on the Phone (2) boots the kernel from the `boot` partition, so a kerne
 1. Hold Power + Volume down until the bootloader shows.
 2. Run `fastboot flash boot boot.img` with the stock `boot.img` of your installed ROM build, or with your backup.
 3. Recovery works again. Flash a working kernel zip from there.
+
+### Crash logs
+
+The zip installs a small script, `/data/adb/post-fs-data.d/pstore-archive.sh`. KernelSU runs it as root early in every boot. It copies the previous boot's logs from `/sys/fs/pstore` into a new folder in `/data/adb/pstore/` and keeps the last 20 boots:
+
+- `console-ramoops-0`: kernel log of the previous boot, up to the crash or shutdown
+- `pmsg-ramoops-0`: Android log of the previous boot
+- `dmesg-ramoops-N`: kernel panic report, only after a panic. The script deletes it from pstore after copying, so each panic is saved once.
+
+Folder names come from the phone's clock early in boot, before Android sets the time, so they often start with `1970`. The newest folder is the last one by name.
+
+**Setup**
+
+1. Flash the zip from the SukiSU manager, or from a recovery that decrypts `/data`. Without `/data`, the zip prints `crash-log archiver not installed`; flash it again from the manager.
+2. In the SukiSU manager, allow root for **Shell**, so `su` works in `adb shell`.
+3. Check that the script is there: `adb shell su -c ls /data/adb/post-fs-data.d/`
+
+**After a crash or an unexpected reboot**
+
+1. Boot the phone normally. If the kernel does not boot, flash a working one first (see above). The first good boot saves the logs of the boot that crashed.
+2. Open a root shell and list the saved boots, newest first:
+   ```sh
+   adb shell
+   su
+   ls -r /data/adb/pstore
+   ```
+3. Search the newest folder for the cause:
+   ```sh
+   grep -a -iE 'panic|oops|BUG:|watchdog' /data/adb/pstore/<folder>/console-ramoops-0
+   ```
+4. To attach the logs to a bug report, copy them all to the PC:
+   ```sh
+   adb exec-out "su -c 'tar -cf - -C /data/adb pstore'" > pstore.tar
+   ```
+
+**Remove it**: `adb shell su -c rm /data/adb/post-fs-data.d/pstore-archive.sh`. Saved logs stay in `/data/adb/pstore` until you delete that folder.
+
+A kernel that dies before pstore starts, as release #22 did, leaves no log. Test new builds with `fastboot boot` first (see above).
 
 ## Build it yourself
 
