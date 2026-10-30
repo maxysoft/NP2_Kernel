@@ -34,7 +34,7 @@ Generic GKI 5.10 kernel build workflow for Nothing Phone 2 (sm8475/waipio), prod
 | Droidspaces-OSS patches | vendored from `4106757e0f722fd9afa888808ec91f4ff855e515` | v6.6.0 (patch dir unchanged since 2026-04-22) |
 | LZ4 v1.10.0 (`patches/lz4`) | vendored: `lib/lz4` + `include/linux/lz4.h` from arter97/android_kernel_nothing_sm8475 @ `906ca150c6ae`, plus the level clamp (§R2) | LZ4 v1.10.0 |
 | Lazy RCU (`patches/rcu-lazy`) | vendored; each patch header names its source commit (ACK `android13-5.10` via arter97 @ `906ca150c6ae`, mainline up to v6.12) | — |
-| ACK GKI release (LineageOS backport) | vendored in `patches/lineage-lts`: `android12-5.10.269_r00` @ `47f3be4bebff` merged into `lineage-23.2` @ `4ec5491f6b5f` | latest `android12-5.10` GKI release tag (2026-10-13) |
+| ACK GKI release (LineageOS backport) | vendored in `patches/lineage-lts`: `android12-5.10.270_r00` @ `a5829f70a566` merged into `lineage-23.2` @ `4ec5491f6b5f` | latest `android12-5.10` GKI release tag (2026-10-14) |
 | GitHub Actions | SHA-pinned with `# vX.Y.Z` comment | checkout v7.0.1, cache v6.1.0, upload-artifact v7.0.2, download-artifact v8.0.2, action-gh-release v3.0.3 |
 
 Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-facing inputs — pinning defeats the override); the Baseband-guard ref passed to its `setup.sh` (that script uses `git clone --branch`, which rejects raw SHAs — the tag `v1.1` is passed and the resulting HEAD is asserted against the pinned SHA); and `SukiSU_KernelPatch_patch`, whose release tag `0.14.0` is mutable: `build_kernel.sh` downloads `patch_linux` from that tag and fails unless its sha256 matches the pin above (equal to GitHub's published asset digest on 2026-10-30). Bumping the tag means bumping the checksum.
@@ -121,19 +121,32 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 
 ## §L — LineageOS LTS backport (`patches/lineage-lts`)
 
-**L1** — The source is the ACK GKI release tag `android12-5.10.269_r00`, not kernel.org stable. `lineage-23.2` declares `BRANCH=android12-5.10` and `KMI_GENERATION=9` in `build.config.common`, and already merges these tags (`Merge tag 'android12-5.10.246_r00'`). The tag keeps KMI generation 9 and carries ACK's reverts of ABI-breaking LTS commits. Conflicted files when merged into `lineage-23.2`: tag 13, ACK `android12-5.10-lts` head 13, kernel.org `v5.10.271` 83.
+**L1** — The source is the latest ACK GKI release tag, now `android12-5.10.270_r00`, not kernel.org stable. `lineage-23.2` declares `BRANCH=android12-5.10` and `KMI_GENERATION=9` in `build.config.common`, and already merges these tags (`Merge tag 'android12-5.10.246_r00'`). The tag keeps KMI generation 9 and carries ACK's reverts of ABI-breaking LTS commits. Conflicted files when `.269_r00` was merged into `lineage-23.2`: tag 13, ACK `android12-5.10-lts` head 13, kernel.org `v5.10.271` 83.
 
 **L2** — The vanilla AnyKernel3 flash replaces only `Image`; the ROM's vendor modules stay. They load only if every symbol they import keeps its `CONFIG_MODVERSIONS` CRC. Out-of-tree Qualcomm modules are built with `KMI_ENFORCED=1` against `android/abi_gki_aarch64_qcom`, so only KMI-listed symbols matter for them; in-tree `=m` modules can import any export.
 
 **L3** — The patch is the full `git diff` of a local merge, applied by the "Apply extra patches" step with GNU `patch -p1`. Its header records base, tag and merge commits. On `lineage-23.2` @ `4ec5491f6b5f` it reproduces the merge tree exactly (verified with GNU patch 2.7.6, the version on `ubuntu-latest`). Because `patch` accepts fuzz, the step first asserts that the clone's `HEAD` equals the header's `Base:` commit, for any patch that has one. If LineageOS moves `lineage-23.2`, or `kernel_repo`/`kernel_branch` is overridden without clearing `extra_patches_dir`, the build fails there: regenerate (or clear the input).
 
-Regenerate (use a full clone: googlesource ignores `--filter=blob:none` and refuses by-SHA blob fetches, so a blobless clone breaks the merge with `could not fetch <sha> from promisor remote`):
+Regenerate for a newer tag `<N>` by merging it on top of the vendored merge of the previous tag `<P>`, so the earlier resolutions carry over and only the new delta conflicts (done for `.270_r00`). The merge base is `<P>`, so shallow history is enough:
+
+```bash
+git clone --depth 1 -b lineage-23.2 https://github.com/LineageOS/android_kernel_nothing_sm8475.git kernel
+git -C kernel fetch --shallow-since=<a month before tag P> https://android.googlesource.com/kernel/common \
+  'refs/tags/android12-5.10.<P>_r00:refs/tags/android12-5.10.<P>_r00' 'refs/tags/android12-5.10.<N>_r00:refs/tags/android12-5.10.<N>_r00'
+git -C kernel apply --index ../patches/lineage-lts/0001-android12-5.10.<P>_r00.patch
+git -C kernel reset --hard "$(git -C kernel commit-tree "$(git -C kernel write-tree)" -p HEAD -p 'android12-5.10.<P>_r00^{commit}' -m 'Merge android12-5.10.<P>_r00')"
+git -C kernel merge --no-ff android12-5.10.<N>_r00   # resolve conflicts, see L4
+git -C kernel -c diff.renameLimit=20000 diff origin/lineage-23.2 HEAD > patches/lineage-lts/0001-android12-5.10.<N>_r00.patch   # prepend the header
+git rm patches/lineage-lts/0001-android12-5.10.<P>_r00.patch   # CI applies every *.patch in the directory
+```
+
+From scratch (only if the vendored merge is lost), use a full clone: googlesource ignores `--filter=blob:none` and refuses by-SHA blob fetches, so a blobless clone breaks the merge with `could not fetch <sha> from promisor remote`:
 
 ```bash
 git clone -b lineage-23.2 https://github.com/LineageOS/android_kernel_nothing_sm8475.git kernel
 git -C kernel fetch https://android.googlesource.com/kernel/common 'refs/tags/android12-5.10.<N>_r00:refs/tags/android12-5.10.<N>_r00'
 git -C kernel merge --no-ff android12-5.10.<N>_r00   # resolve conflicts, see L4
-git -C kernel diff origin/lineage-23.2 HEAD > patches/lineage-lts/0001-android12-5.10.<N>_r00.patch   # prepend the header
+git -C kernel -c diff.renameLimit=20000 diff origin/lineage-23.2 HEAD > patches/lineage-lts/0001-android12-5.10.<N>_r00.patch   # prepend the header
 ```
 
 Check `KMI_GENERATION` is still 9 in the new tag, then re-run the L5 checks.
@@ -151,6 +164,11 @@ Check `KMI_GENERATION` is still 9 in the new tag, then re-run the L5 checks.
 - `net/qrtr/af_qrtr.c`: Lineage plus tx_flow radix tree to xarray, `__sock_put` reorder in `port_remove`, `size > len` check, init_net-only sockets.
 - `net/qrtr/ns.c`: Lineage plus the `remove()` use-after-free fix, limits (128 lookups, 512 nodes, 256 servers per node) and freeing the node on bye. CLO adds an exported `qrtr_get_service_id()` that `af_qrtr` calls on every received packet; it reads `nodes` and `node->servers` with no lock, and upstream has no such reader. A follow-up commit on the merge therefore frees published nodes and servers with `kfree_rcu` and runs that reader under `rcu_read_lock()`; without it, the ported node free opens a use-after-free when a remote processor sends BYE.
 
+Conflict resolutions for `.270_r00`, merged on top of the `.269_r00` merge (2 files, both `=m`). The 11 other files Lineage diverges in that the delta touches auto-merged to exactly the upstream change.
+
+- `drivers/dma/qcom/bam_dma.c`: both sides (Lineage's IPC log teardown, then `pm_runtime_dont_use_autosuspend()`).
+- `drivers/rpmsg/qcom_glink_native.c`: upstream's `qcom_glink_remove_rpmsg_device()` in both close paths instead of Lineage's inline copies, and the unused `chinfo` local in `qcom_glink_rx_close_ack()` dropped. CLO's `qcom_glink_destroy_ept()` already does not unregister the rpdev, which is where upstream's deadlock fix ends up.
+
 **L5** — Verified 2026-10-13, vanilla trees (no KernelSU/SUSFS/BBG), clang 18.1.3, `LTO_NONE` and no CFI because the full-LTO link needs more than 12 GB RAM (CI keeps full LTO):
 
 - Base and merged trees both build `Image` and all 289 modules; the merged modules include every resolved Qualcomm driver, with no warnings in those files.
@@ -159,6 +177,14 @@ Check `KMI_GENERATION` is still 9 in the new tag, then re-run the L5 checks.
 - The SUSFS 50_ patch and both Droidspaces patches apply to the merged tree (offsets only).
 
 Not verified locally: the KernelSU/SUSFS/BBG/KPM build and the full-LTO link (CI only), booting, and the imports of the ROM's own out-of-tree `vendor_dlkm` modules (taken as KMI-only from `KMI_ENFORCED=1`, not read from a device).
+
+`.270_r00`, verified 2026-10-30 the same way against the `.269_r00` merge:
+
+- Both trees build `Image` and all 289 modules; no warnings in the two resolved drivers.
+- `vmlinux.symvers`: 0 of 7315 KMI-listed symbols removed or CRC-changed. Outside the lists, none removed, 2 added, 20 CRCs changed (Bluetooth `l2cap_*` and `hci_conn_*`, `crypto_ecdh_*`).
+- The in-tree modules import 2133 vmlinux symbols; none is removed or CRC-changed.
+- The patch reproduces the merge tree with GNU patch 2.7.6; `patches/lz4` and `patches/rcu-lazy` apply with no fuzz, the SUSFS 50_ patch (`cfa82d53`) with offsets only, both Droidspaces patches cleanly.
+- The delta adds no `call_rcu()` caller (§R3) and uses no `ANDROID_KABI` slot (D2).
 
 **L6** — Runtime risk of the flashed kernel comes from the built-in LTS changes; the boot test is the check. The three risks below sit in `=m` drivers and take effect only if modules built from this tree are installed as well:
 
@@ -214,7 +240,7 @@ Not verified locally: the KernelSU/SUSFS/BBG/KPM build and the full-LTO link (CI
 - [x] T13: Sync spec with the build-date zip name (`5fa304f`, `1552280`) — see V1 and I.zip-name
 - [x] T14: SHA-pin every third-party ref and bump to upstream stable — SukiSU-Ultra v4.1.3 → v4.2.0, SUSFS to v2.3.0 tip, Baseband-guard unpinned `main` → v1.1, AnyKernel3 unpinned `master` → pre-magiskboot-beta commit, all four GitHub Actions to SHAs. See V9. The old `# Pinned: 28619f1263fd` SUSFS comment was false — the clone tracked the branch tip and had drifted 21 commits (incl. 8 rewrites of the applied patch and a v2.2.0 → v2.3.0 bump)
 - [x] T15: Verify the checkout after each `curl | bash` installer (V10) and drop the dead `git -C KernelSU fetch origin miuix:miuix` — SukiSU-Ultra has no `miuix` branch, so that line always fell through to its no-op fallback
-- [ ] T16: Kernel sources lag `android13-5.10-lts` (5.10.269): LineageOS `lineage-23.2` at 5.10.246 (idle since 2026-01-24), NothingOSS `sm8475/b/mr` at 5.10.237 (has the newer Pong-B4.1 vendor base), arter97 `master` at 5.10.251. Nothing to bump in this repo — the lag is upstream's. LineageOS is now backported in-repo (T25); NothingOSS still lags
+- [ ] T16: Kernel sources lag `android13-5.10-lts` (5.10.269): LineageOS `lineage-23.2` at 5.10.246 (idle since 2026-01-24), NothingOSS `sm8475/b/mr` at 5.10.237 (has the newer Pong-B4.1 vendor base), arter97 `master` at 5.10.251. Nothing to bump in this repo — the lag is upstream's. LineageOS is now backported in-repo (T25, T35); NothingOSS still lags
 - [ ] T17: `patches/arter97/avc_compat.patch` is unreachable — no arter97 job exists and `extra_patches_dir` defaults to the LineageOS backport. The patch still applies cleanly to arter97 `master` and is still required (arter97 uses `security_sid_to_context_stack`), so either wire a job or drop the file
 - [x] T18: Fix SUSFS never being compiled in. `CONFIG_KSU_SUSFS` is declared only by SukiSU's `builtin` branch; under the v4.2.0 tag the symbol did not exist, `olddefconfig` dropped it, and all ~250 `#ifdef CONFIG_KSU_SUSFS` hunks from the 50_ patch compiled out while the release notes said `SUSFS: true`. Verified against a shipped `Image`: zero `susfs` strings, `baseband_guard` strings present. susfs4ksu's own `kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch` is not the fix — it targets official KernelSU and fails 5-14 hunks against every SukiSU revision tried, tag and `main` alike
 - [x] T19: Pin `KSU_VERSION=40900` in `MAKE_ARGS` — see V6. Symptom was "manager version (40900) and kernelsu driver version (40922) mismatch!"; 40922 is `40000 + count(main) - 2815` with `count(main)` = 3737
@@ -233,4 +259,4 @@ Not verified locally: the KernelSU/SUSFS/BBG/KPM build and the full-LTO link (CI
 - [x] T32: Stay on manager v4.2.0 after SukiSU-Ultra v4.2.1 (40994, uapi 5). `builtin`, the only SUSFS-capable branch, is still at uapi 2, so v4.2.1 runs limited on this kernel. `Check manager alignment` now checks against the pinned `MGR_TAG` instead of `releases/latest` and only warns about a newer release (V6). `builtin` head `0af2cf9c` was not adopted: it adds dynamic multi-manager signatures and `KSU_PACKAGE_NAME`, but no uapi change
 - [x] T33: Target manager v4.3.0 (41100, uapi 6). `builtin` reached uapi 6 on 2026-10-21 (`19eeb2f3`), which closes T32. Pinned `builtin` `6397fcb5`, not head `b16e899a` (user choice, 2026-10-30): head's KPM bridge speaks ABI 2 and the newest `patch_linux` (0.14.0) speaks ABI 1, so KPM would not load. Left out until T34: the SELinux-hide policy parsing fix (#3936), the extension capability ABI and handler enumeration (the manager falls back to its static table on older kernels), the version-spoof page and KPM post-fs-data loading. SUSFS `14c45388` → `cfa82d53`, required by `builtin`'s priority uid filter; its 50_ patch applies to `lineage-23.2` + §L + `patches/lz4` + `patches/rcu-lazy` with offsets only, and the Droidspaces patches still apply. `patch_linux` 0.13.0 → 0.14.0 (0.13.0 has no bridge). New `builtin` and SUSFS code still uses only `kfree_rcu()` and `synchronize_rcu()` (§R3). SUSFS `a9bc185` moved `susfs_parse_priority_app_strings()` after the manager throne scan in its own patch for official KernelSU; `builtin` (pinned and head) has its own integration and still calls it before the scan (`kernel/manager/pkg_observer.c`), so the priority uid filter can lag one package change. Upstream difference, not patched here. Verified in CI only: the build and link; boot not verified
 - [ ] T34: Move `builtin` to its head together with the first KernelPatch release whose bridge speaks ABI 2 (V9)
-- [ ] T35: ACK `android12-5.10.270_r00` is out; regenerate §L
+- [x] T35: LineageOS backport moved to ACK `android12-5.10.270_r00` by merging it on top of the `.269_r00` merge (§L3, L4, L5). 80 built-in CVEs fixed; ACK reverted 3 built-in 5.10.270 fixes for the KMI (`docs/cve-5.10.270.md`). The 5.10.269 CVE list's "no 5.10 fix" row counted CVEs introduced after 5.10; the new list fixes the range check. Verified locally: patch application, build and symvers. Not verified: CI full-LTO build, boot

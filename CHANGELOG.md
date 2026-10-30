@@ -3,7 +3,22 @@
 
 ## Unreleased
 
+### New
+- **LineageOS kernel updated from 5.10.269 to 5.10.270.** The LineageOS build now applies Google's `android12-5.10.270_r00` GKI release (`a5829f70a566`, KMI generation 9) on top of LineageOS's `lineage-23.2` kernel. The NothingOSS build is not affected.
+- 80 published CVEs in code built into the kernel are fixed compared with 5.10.269. The list, with the ones still open, is in [docs/cve-5.10.270.md](docs/cve-5.10.270.md). Examples:
+  - CVE-2026-89783: xfrm6: fix out-of-bounds write in xfrm6_input_addr() when secpath is full
+  - CVE-2026-53078: bpf: Fix same-register dst/src OOB read and pointer leak in sock_ops
+  - CVE-2025-40123: bpf: Enforce expected_attach_type for tailcall compatibility
+  - CVE-2026-89569: Bluetooth: RFCOMM: serialize security confirmation handling
+  - CVE-2026-80912: selinux: reject an unclaimed class value in security_get_classes()
+  - CVE-2026-81008: interconnect: Fix use after free in icc_get() and of_icc_get_by_index()
+  - CVE-2026-89736: usb: gadget: u_audio: Fix use-after-free on sound card disconnect
+  - CVE-2026-89726: lib/ucs2_string.c: fix out-of-bounds read in ucs2_strnlen()
+
 ### Changed
+- `patches/lineage-lts/0001-android12-5.10.270_r00.patch` replaces the 5.10.269 patch. It is the 5.10.269 merge plus a merge of `android12-5.10.270_r00`: 833 commits, with stable 5.10.270, some 5.10.271 fixes that ACK merged early, and the Android-specific commits listed below.
+  - None of the 7,315 KMI symbols is removed or changes its CRC, so the ROM's vendor modules keep loading. 20 other exports change their CRC (Bluetooth L2CAP and `hci_conn_*`, `crypto_ecdh_*`); none is used by the in-tree modules.
+  - Conflicts in 2 Qualcomm driver files, both built as modules: `drivers/dma/qcom/bam_dma.c` keeps LineageOS's teardown and adds the autosuspend cleanup; `drivers/rpmsg/qcom_glink_native.c` takes upstream's rpmsg device removal helper. LineageOS's code already had upstream's deadlock fix.
 - **SukiSU-Ultra manager v4.3.0.** Install `SukiSU_v4.3.0_41100-release.apk`. SukiSU's SUSFS-capable `builtin` branch now has the same uapi version as v4.3.0 (6), so the manager runs fully featured: Superuser and Module tabs, ksud install. Manager v4.2.0 no longer matches this kernel.
 - SukiSU-Ultra `builtin` at `6397fcb5` (Oct.25 2026). Newer `builtin` commits need a KernelPatch version that is not released yet; with them, KPM modules would not load.
 - SUSFS v2.3.0 at `cfa82d53`: adds the priority uid filter and more SELinux-hide fixes. SukiSU updates the filter before it rescans installed apps, so an app installed since the last package change is added one change late.
@@ -11,6 +26,34 @@
 
 ### Notes
 - The build checks the driver against manager v4.3.0, not the latest SukiSU release. It warns when a newer manager is out.
+- ACK reverted 3 fixes from 5.10.270 in code built into the kernel because they change the KMI: CVE-2025-38097 (espintcp), CVE-2026-43198 (`tcp_v6_syn_recv_sock()` race), CVE-2026-90329 (HID probe cleanup). They stay open.
+- 85 CVEs fixed upstream after 5.10.270 affect code built into this kernel and are still open.
+- The 5.10.269 CVE list's "no 5.10 fix" count (57) was wrong: it counted bugs introduced after 5.10. The corrected count for 5.10.270 is 703. It includes some CVEs that do not apply to 5.10, because records with an unknown origin mark every kernel as affected.
+
+<details>
+<summary>Android-specific commits in android12-5.10.270_r00 (19)</summary>
+
+- `a5829f70a566` Revert "Bluetooth: btusb: Fix BD_ADDR byte order in btusb_set_bdaddr_wcn6855()"
+- `a6db604157a1` UPSTREAM: clk: at91: pmc: #undef field_{get,prep}() before definition
+- `9486312bd943` Revert "of: property: use unsigned int return on of_graph_get_endpoint_count()"
+- `f19a7b8cc968` Revert "HID: split apart hid_device_probe to make logic more apparent"
+- `fafc9a78fb5e` Revert "HID: ensure timely release of driver-allocated resources"
+- `22257cb249aa` Revert "HID: synchronize input before cleaning up a failed probe"
+- `40995b951777` Revert "fanotify: report full event length for FIONREAD"
+- `a4c9cdd49861` Revert "power: supply: sc2731_charger: Convert to platform remove callback returning void"
+- `15468f2e0d11` Revert "power: supply: sc2731_charger: cancel work on remove"
+- `d83b86f26806` Revert "espintcp: remove encap socket caching to avoid reference leak"
+- `764ca2894abc` Revert "tcp: fix potential race in tcp_v6_syn_recv_sock()"
+- `263b10a805c6` BACKPORT: UPSTREAM: f2fs: compress: fix UAF of f2fs_inode_info in f2fs_free_dic
+- `e0b656e8a493` BACKPORT: UPSTREAM: f2fs: compress: change the first parameter of page_array_{alloc,free} to sbi
+- `2008f7c55f74` UPSTREAM: Bluetooth: SCO: Fix use-after-free in sco_recv_frame() due to missing sock_hold
+- `029cea2997d4` UPSTREAM: Bluetooth: SCO: Fix UAF on sco_sock_timeout
+- `7b7d813beaff` UPSTREAM: Bluetooth: L2CAP: Fix UAF in channel timeout by holding conn ref
+- `41f594ae654b` Revert "irqchip/mbigen: Fix mbigen node address layout"
+- `8b998c171ed8` Revert "media: v4l2-dev: fix error handling in __video_register_device()"
+- `2a6663b4fdcf` Revert "USB: serial: keyspan_pda: fix information leak"
+
+</details>
 
 ## v3.2.0 - LZ4 1.10 and lazy RCU (Oct.14 2026)
 

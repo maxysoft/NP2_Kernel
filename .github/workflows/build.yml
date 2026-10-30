@@ -42,7 +42,7 @@ on:
         type: string
         default: 'gki-android13-5.10'
       extra_patches_dir:
-        description: 'Extra patch directory (repo-local). Default is the LineageOS-only 5.10.269 backport; clear it for any other kernel_repo/kernel_branch'
+        description: 'Extra patch directory (repo-local). Default is the LineageOS-only 5.10.270 backport; clear it for any other kernel_repo/kernel_branch'
         required: false
         type: string
         default: 'patches/lineage-lts'
