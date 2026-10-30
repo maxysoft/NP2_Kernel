@@ -163,7 +163,7 @@ jobs:
         LD=ld.lld HOSTLD=ld.lld
         CC=clang CXX=clang++
         HOSTCC=clang HOSTCXX=clang++
-        KSU_VERSION=40900
+        KSU_VERSION=41100
         O=out
 
     steps:
@@ -240,18 +240,20 @@ jobs:
       - name: Clone SUSFS
         if: ${{ inputs.susfs_support == true }}
         run: |
-          # Pinned: SUSFS v2.3.0 @ 14c45388ec8c (2026-10-12). The branch carries no
+          # Pinned: SUSFS v2.3.0 @ cfa82d53371b (2026-10-29). The branch carries no
           # current tag (only 1.4.2-gki-android13-5.10 from 2024), so the SHA is the pin.
           # Full clone, not --depth=1: a shallow clone cannot check out a non-tip commit.
           #
-          # Paired with the SukiSU `builtin` pin below: the kernel-side patch calls ksu_*
-          # symbols (e.g. ksu_handle_post_execveat_sucompat) that only a matching builtin
-          # tree defines. Bump both pins together, or the link fails as run 35168531820 did:
+          # Paired with the SukiSU `builtin` pin below, both ways: the kernel-side patch
+          # calls ksu_* symbols (e.g. ksu_setup_preinit_file) that only a matching builtin
+          # tree defines, and builtin calls susfs_* functions (e.g.
+          # susfs_set_priority_uid_filter) that only a matching fs/susfs.c defines. Bump
+          # both pins together, or the link fails as run 35168531820 did:
           #   ld.lld: error: undefined symbol: ksu_install_su_fd
           branch="${{ inputs.susfs_branch || 'gki-android13-5.10' }}"
           git clone -b "$branch" https://gitlab.com/simonpunk/susfs4ksu.git
           if [ "$branch" = "gki-android13-5.10" ]; then
-            git -C susfs4ksu checkout 14c45388ec8cb3ca72f2ac8bf83097b9285a8418
+            git -C susfs4ksu checkout cfa82d53371b2dacb3ed79e31cb62a9cc349b5d5
           else
             echo "Non-default SUSFS branch '$branch' — no pin available, tracking tip"
           fi
@@ -259,15 +261,18 @@ jobs:
       - name: Setup SukiSU-Ultra
         run: |
           cd "$KERNEL_DIR"
-          # Pinned: SukiSU-Ultra `builtin` branch @ 6c284e957fea (2026-10-09).
-          # Deliberately NOT a release tag. v4.2.0, main and dev declare no KSU_SUSFS
+          # Pinned: SukiSU-Ultra `builtin` branch @ 6397fcb5d96e (2026-10-25), not its head.
+          # Its KPM bridge speaks ABI 1, like patch_linux 0.14.0 in build_kernel.sh. From
+          # c02870ac on, builtin speaks ABI 2, which no KernelPatch release ships yet, and
+          # KPM loading fails with EOPNOTSUPP. Bump this pin and patch_linux together.
+          # Deliberately NOT a release tag. Release tags, main and dev declare no KSU_SUSFS
           # symbol at all, so `CONFIG_KSU_SUSFS=y` was silently dropped by olddefconfig
           # and SUSFS compiled out of every build. `builtin` is the SUSFS-integrated
           # variant (KSU_SUSFS + 9 sub-options, all default y) and still consumes
           # fs/susfs.c + include/linux/susfs.h from the susfs4ksu patch below.
           # setup.sh is fetched at the same commit; it swallows a failed checkout
           # ("git checkout ... || echo"), so the ref is verified afterwards.
-          SUKISU_REV=6c284e957feaa9a388a9f1c37dc4ec80d95e434b
+          SUKISU_REV=6397fcb5d96e8f4953c71e02c73f8c6800541bff
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
 
@@ -275,7 +280,7 @@ jobs:
         id: manager
         env:
           GH_TOKEN: ${{ github.token }}
-          MGR_TAG: v4.2.0
+          MGR_TAG: v4.3.0
         run: |
           rel=$(gh api "repos/SukiSU-Ultra/SukiSU-Ultra/releases/tags/$MGR_TAG")
           tag=$(jq -r .tag_name <<<"$rel")
@@ -292,7 +297,7 @@ jobs:
           fi
           latest=$(gh api repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest --jq .tag_name)
           if [ "$latest" != "$tag" ]; then
-            echo "::warning::SukiSU-Ultra $latest is out; this build still targets manager $tag. Bump MGR_TAG, KSU_VERSION and the builtin pin together once builtin's uapi version matches $latest (SPEC V6)."
+            echo "::warning::SukiSU-Ultra $latest is out; this build still targets manager $tag. Bump MGR_TAG, KSU_VERSION, the builtin pin and, if its KPM bridge ABI changed, patch_linux together once builtin's uapi version matches $latest (SPEC V6)."
           fi
           echo "manager=$tag ($mgr_code)" >> "$GITHUB_OUTPUT"
 

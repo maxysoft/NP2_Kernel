@@ -3,9 +3,14 @@
 
 ## Unreleased
 
+### Changed
+- **SukiSU-Ultra manager v4.3.0.** Install `SukiSU_v4.3.0_41100-release.apk`. SukiSU's SUSFS-capable `builtin` branch now has the same uapi version as v4.3.0 (6), so the manager runs fully featured: Superuser and Module tabs, ksud install. Manager v4.2.0 no longer matches this kernel.
+- SukiSU-Ultra `builtin` at `6397fcb5` (Oct.25 2026). Newer `builtin` commits need a KernelPatch version that is not released yet; with them, KPM modules would not load.
+- SUSFS v2.3.0 at `cfa82d53`: adds the priority uid filter and more SELinux-hide fixes. SukiSU updates the filter before it rescans installed apps, so an app installed since the last package change is added one change late.
+- KPM: `patch_linux` from SukiSU_KernelPatch_patch 0.14.0. KPM modules now load through SukiSU's new KernelPatch bridge.
+
 ### Notes
-- Keep the SukiSU-Ultra manager at **v4.2.0**. Do not update to v4.2.1 yet. It needs uapi version 5, and SukiSU's SUSFS-capable `builtin` branch still has uapi 2. On this kernel, v4.2.1 hides the Superuser and Module tabs and shows "Kernel update required".
-- The build checks the driver against manager v4.2.0 instead of the latest SukiSU release. It warns when a newer manager is out.
+- The build checks the driver against manager v4.3.0, not the latest SukiSU release. It warns when a newer manager is out.
 
 ## v3.2.0 - LZ4 1.10 and lazy RCU (Oct.14 2026)
 

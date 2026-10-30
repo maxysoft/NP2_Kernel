@@ -78,6 +78,11 @@ if [ "${KPM_SUPPORT}" = "true" ]; then
   echo "CONFIG_KALLSYMS=y" >> "${EXTRA_CFG}"
   echo "CONFIG_KALLSYMS_ALL=y" >> "${EXTRA_CFG}"
   echo "CONFIG_KPROBES=y" >> "${EXTRA_CFG}"
+  # Must equal the bridge ABI of the patch_linux release downloaded below; bump both together.
+  if ! grep -q '^#define SUKISU_KPM_ABI_VERSION 1$' KernelSU/kernel/extension/kpm/bridge.h; then
+    echo "ERROR: SukiSU KPM bridge ABI differs from patch_linux 0.14.0 (ABI 1); KPM would never load (SPEC V9)." >&2
+    exit 1
+  fi
 fi
 
 if [ "${BBG_SUPPORT}" = "true" ]; then
@@ -160,9 +165,9 @@ make -j"${JOBS}" ${MAKE_ARGS} Image KCFLAGS="-Wno-error"
 
 if [ "${KPM_SUPPORT}" = "true" ]; then
   cd out/arch/arm64/boot/
-  # The 0.13.0 tag is mutable; the checksum is the real pin.
-  curl -fsSLo patch_linux https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.13.0/patch_linux
-  echo "ea4884140c0ee8835bc79b67e4c9b46094c6640d6407f0aab34d2df4e28e0450  patch_linux" | sha256sum -c -
+  # The 0.14.0 tag is mutable; the checksum is the real pin.
+  curl -fsSLo patch_linux https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.14.0/patch_linux
+  echo "5b4984fbe7771925542d27b159278184cf3ce5064dafb751f8a2fb073b922b3f  patch_linux" | sha256sum -c -
   chmod +x ./patch_linux
   ./patch_linux
   rm -f ./Image
