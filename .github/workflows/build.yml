@@ -262,9 +262,9 @@ jobs:
         run: |
           cd "$KERNEL_DIR"
           # Pinned: SukiSU-Ultra `builtin` branch @ 6397fcb5d96e (2026-10-25), not its head.
-          # Its KPM bridge speaks ABI 1, like patch_linux 0.14.0 in build_kernel.sh. From
+          # Its KPM bridge speaks ABI 1, like kpimg 0.14.0 in build_kernel.sh. From
           # c02870ac on, builtin speaks ABI 2, which no KernelPatch release ships yet, and
-          # KPM loading fails with EOPNOTSUPP. Bump this pin and patch_linux together.
+          # KPM loading fails with EOPNOTSUPP. Bump this pin and kpimg together.
           # Deliberately NOT a release tag. Release tags, main and dev declare no KSU_SUSFS
           # symbol at all, so `CONFIG_KSU_SUSFS=y` was silently dropped by olddefconfig
           # and SUSFS compiled out of every build. `builtin` is the SUSFS-integrated
@@ -297,7 +297,7 @@ jobs:
           fi
           latest=$(gh api repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest --jq .tag_name)
           if [ "$latest" != "$tag" ]; then
-            echo "::warning::SukiSU-Ultra $latest is out; this build still targets manager $tag. Bump MGR_TAG, KSU_VERSION, the builtin pin and, if its KPM bridge ABI changed, patch_linux together once builtin's uapi version matches $latest (SPEC V6)."
+            echo "::warning::SukiSU-Ultra $latest is out; this build still targets manager $tag. Bump MGR_TAG, KSU_VERSION, the builtin pin and, if its KPM bridge ABI changed, kpimg together once builtin's uapi version matches $latest (SPEC V6)."
           fi
           echo "manager=$tag ($mgr_code)" >> "$GITHUB_OUTPUT"
 

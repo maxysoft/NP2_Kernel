@@ -33,6 +33,16 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 
 To check the installed version, run `cat /proc/version`. Settings can show an older version when SUSFS uname spoofing is set.
 
+### Try a build before flashing it
+
+Recovery on the Phone (2) boots the kernel from the `boot` partition, so a kernel that does not boot also breaks recovery. To test a build without writing anything, put the kernel in a copy of your current boot image (for example with `magiskboot`), then run `fastboot boot test-boot.img` from the bootloader. It boots once from RAM; the next reboot uses the flashed kernel again.
+
+### If the phone does not boot
+
+1. Hold Power + Volume down until the bootloader shows.
+2. Run `fastboot flash boot boot.img` with the stock `boot.img` of your installed ROM build, or with your backup.
+3. Recovery works again. Flash a working kernel zip from there.
+
 ## Build it yourself
 
 1. Fork this repo

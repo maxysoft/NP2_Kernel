@@ -3,6 +3,9 @@
 
 ## Unreleased
 
+### Fixed
+- **Release #22 did not boot.** The phone went straight to Qualcomm CrashDump Mode, and recovery crashed too. Cause: `patch_linux` 0.14.0 embeds a 16-byte stub instead of the KernelPatch image, and it pointed the kernel's first instruction past the end of `Image`. KPM is now patched with `kptools-linux` and the `kpimg` from the same 0.14.0 release, and the build fails unless `kptools-linux -l` shows a patched image with kpimg `0xe00`.
+
 ### New
 - **LineageOS kernel updated from 5.10.269 to 5.10.270.** The LineageOS build now applies Google's `android12-5.10.270_r00` GKI release (`a5829f70a566`, KMI generation 9) on top of LineageOS's `lineage-23.2` kernel. The NothingOSS build is not affected.
 - 80 published CVEs in code built into the kernel are fixed compared with 5.10.269. The list, with the ones still open, is in [docs/cve-5.10.270.md](docs/cve-5.10.270.md). Examples:
@@ -22,7 +25,7 @@
 - **SukiSU-Ultra manager v4.3.0.** Install `SukiSU_v4.3.0_41100-release.apk`. SukiSU's SUSFS-capable `builtin` branch now has the same uapi version as v4.3.0 (6), so the manager runs fully featured: Superuser and Module tabs, ksud install. Manager v4.2.0 no longer matches this kernel.
 - SukiSU-Ultra `builtin` at `6397fcb5` (Oct.25 2026). Newer `builtin` commits need a KernelPatch version that is not released yet; with them, KPM modules would not load.
 - SUSFS v2.3.0 at `cfa82d53`: adds the priority uid filter and more SELinux-hide fixes. SukiSU updates the filter before it rescans installed apps, so an app installed since the last package change is added one change late.
-- KPM: `patch_linux` from SukiSU_KernelPatch_patch 0.14.0. KPM modules now load through SukiSU's new KernelPatch bridge.
+- KPM: `kptools-linux` and `kpimg` from SukiSU_KernelPatch_patch 0.14.0. KPM modules now load through SukiSU's new KernelPatch bridge.
 
 ### Notes
 - The build checks the driver against manager v4.3.0, not the latest SukiSU release. It warns when a newer manager is out.

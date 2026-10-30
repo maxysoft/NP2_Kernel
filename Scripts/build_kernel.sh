@@ -78,9 +78,9 @@ if [ "${KPM_SUPPORT}" = "true" ]; then
   echo "CONFIG_KALLSYMS=y" >> "${EXTRA_CFG}"
   echo "CONFIG_KALLSYMS_ALL=y" >> "${EXTRA_CFG}"
   echo "CONFIG_KPROBES=y" >> "${EXTRA_CFG}"
-  # Must equal the bridge ABI of the patch_linux release downloaded below; bump both together.
+  # Must equal the bridge ABI of the kpimg release downloaded below; bump both together.
   if ! grep -q '^#define SUKISU_KPM_ABI_VERSION 1$' KernelSU/kernel/extension/kpm/bridge.h; then
-    echo "ERROR: SukiSU KPM bridge ABI differs from patch_linux 0.14.0 (ABI 1); KPM would never load (SPEC V9)." >&2
+    echo "ERROR: SukiSU KPM bridge ABI differs from kpimg 0.14.0 (ABI 1); KPM would never load (SPEC V9)." >&2
     exit 1
   fi
 fi
@@ -165,11 +165,23 @@ make -j"${JOBS}" ${MAKE_ARGS} Image KCFLAGS="-Wno-error"
 
 if [ "${KPM_SUPPORT}" = "true" ]; then
   cd out/arch/arm64/boot/
-  # The 0.14.0 tag is mutable; the checksum is the real pin.
-  curl -fsSLo patch_linux https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.14.0/patch_linux
-  echo "5b4984fbe7771925542d27b159278184cf3ce5064dafb751f8a2fb073b922b3f  patch_linux" | sha256sum -c -
-  chmod +x ./patch_linux
-  ./patch_linux
+  # The 0.14.0 tag is mutable; the checksums are the real pin.
+  kp=https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.14.0
+  curl -fsSLo kptools-linux "${kp}/kptools-linux"
+  curl -fsSLo kpimg "${kp}/kpimg"
+  sha256sum -c - <<'EOF'
+a6b912ca964d35427d7fbcd87273abac604970e9746fa0613362be971f07259d  kptools-linux
+ab020f31ca1c058603917e46d8a6691fbce0dd5cdc135a9cd8dc780e89472716  kpimg
+EOF
+  chmod +x ./kptools-linux
+  ./kptools-linux -p -i Image -k kpimg -o oImage
+  # patch_linux 0.14.0 exited 0 after embedding a 16-byte stub kpimg, and release #22 died on its first instruction.
+  ./kptools-linux -l -i oImage > kpatch-info.txt 2>&1
+  if ! grep -qx 'patched=true' kpatch-info.txt || ! grep -qx 'version=0xe00' kpatch-info.txt; then
+    echo "ERROR: oImage is not patched with kpimg 0.14.0 (SPEC V9):" >&2
+    cat kpatch-info.txt >&2
+    exit 1
+  fi
   rm -f ./Image
   mv ./oImage ./Image
 fi
