@@ -5,7 +5,7 @@
 Fork of [MiguVT/NP2_Kernel](https://github.com/MiguVT/NP2_Kernel), switched to [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) with KPM support retained.
 
 > [!WARNING]
-> **KPM does not work in v3.3.0 (releases #23 and #24).** The SukiSU-Ultra v4.3.0 manager shows KPM and version overrides as "unsupported", and `ksud kpm` fails with `os error 95`. Root, SUSFS and modules work. v3.4.0 pins a SukiSU-Ultra `builtin` that matches the manager and the [SukiSU KernelPatch](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch) image. This fix is not yet tested on a device.
+> **KPM does not work in v3.3.0 (releases #23 and #24).** The SukiSU-Ultra v4.3.0 manager shows KPM and version overrides as "unsupported", and `ksud kpm` fails with `os error 95`. Root, SUSFS and modules work. v3.4.0 pins a SukiSU-Ultra `builtin` that matches the manager and the [SukiSU KernelPatch](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch) image. Release #27 is the first v3.4.0 build; KPM works there on a device.
 >
 > Parts of this fork (workflow changes, scripts, docs) were written with AI assistance. Review the code before use and flash at your own risk.
 
