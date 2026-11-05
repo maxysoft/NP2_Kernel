@@ -11,6 +11,7 @@
 - SukiSU-Ultra `builtin` at `1cfa5734` (Nov.1 2026), up from `6397fcb5`. New: the KPM page and version overrides in the manager, KPM modules loaded at post-fs-data, the SELinux-hide policy parsing fix (#3936), balanced file references when wrapped files are reopened (tiann/KernelSU#3958), a mount_hide crash fix, and no console logging from atomic paths.
 - SUSFS v2.3.0 at `487cbbb5` (Nov.2 2026), up from `cfa82d53`: a reworked SELinux-hide that uses the safer hash with full tuple comparison, and a reworked uid parser for the priority uid filter. SukiSU now renews the filter again after it rescans installed apps, so new apps are filtered at once. SUSFS's newest commits are not used: they build the priority uid filter only under a config option SukiSU does not have yet, and the kernel would not link.
 - KPM modules load through SukiSU's KernelPatch bridge, ABI 2, with the same `kptools-linux` and `kpimg` 0.14.0 files as v3.3.0.
+- **ThinLTO instead of full LTO.** The full-LTO link ran out of memory on the 16 GB GitHub runner and killed both builds of this version. ThinLTO links in parallel and needs less memory. CFI stays on.
 
 ### Notes
 - The build checks the driver against manager v4.3.0-r1, not the latest SukiSU release. It warns when a newer manager is out.

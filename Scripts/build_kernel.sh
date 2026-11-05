@@ -134,6 +134,12 @@ echo "CONFIG_BPF_JIT_ALWAYS_ON=y" >> "${EXTRA_CFG}"
 echo "CONFIG_FUTEX=y" >> "${EXTRA_CFG}"
 echo "CONFIG_FUTEX_PI=y" >> "${EXTRA_CFG}"
 
+# The full-LTO link of vmlinux.o runs out of memory on the 16 GB GitHub runner.
+if grep -q '^CONFIG_LTO_CLANG_FULL=y' out/.config; then
+  echo "# CONFIG_LTO_CLANG_FULL is not set" >> "${EXTRA_CFG}"
+  echo "CONFIG_LTO_CLANG_THIN=y" >> "${EXTRA_CFG}"
+fi
+
 cat "${EXTRA_CFG}" >> out/.config
 make ${MAKE_ARGS} olddefconfig
 
@@ -145,6 +151,7 @@ if [ "${SUSFS_SUPPORT}" = "true" ]; then required+=("CONFIG_KSU_SUSFS"); fi
 if [ "${KPM_SUPPORT}" = "true" ]; then required+=("CONFIG_KPM"); fi
 if [ "${BBG_SUPPORT}" = "true" ]; then required+=("CONFIG_BBG"); fi
 if [ "${RCU_LAZY_SUPPORT:-false}" = "true" ]; then required+=("CONFIG_RCU_LAZY"); fi
+if grep -q '^CONFIG_LTO_CLANG_THIN=y' "${EXTRA_CFG}"; then required+=("CONFIG_LTO_CLANG_THIN"); fi
 
 missing=()
 for sym in "${required[@]}"; do
