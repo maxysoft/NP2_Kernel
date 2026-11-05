@@ -1,10 +1,26 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
-## Unreleased
+## v3.4.0 - SukiSU-Ultra manager v4.3.0-r1 (Nov.5 2026)
 
 ### Fixed
-- **Release #22 did not boot.** The phone went straight to Qualcomm CrashDump Mode, and recovery crashed too. Cause: `patch_linux` 0.14.0 embeds a 16-byte stub instead of the KernelPatch image, and it pointed the kernel's first instruction past the end of `Image`. KPM is now patched with `kptools-linux` and the `kpimg` from the same 0.14.0 release, and the build fails unless `kptools-linux -l` shows a patched image with kpimg `0xe00`.
+- **KPM did not work in v3.3.0.** In release #23, `ksud kpm` failed with `os error 95`, and the manager showed KPM and version overrides as "unsupported". SukiSU-Ultra `builtin` `6397fcb5` was older than the extension interface the v4.3 manager uses, and its KPM bridge (ABI 1) did not match the 0.14.0 `kpimg`, which is built from a newer KernelPatch commit with ABI 2. `builtin` now has both. The build now checks for ABI 2.
+
+### Changed
+- **SukiSU-Ultra manager v4.3.0-r1.** Install `SukiSU_v4.3.0-r1_41140-release.apk`. Its uapi version is still 6, so v4.3.0 also works.
+- SukiSU-Ultra `builtin` at `1cfa5734` (Nov.1 2026), up from `6397fcb5`. New: the KPM page and version overrides in the manager, KPM modules loaded at post-fs-data, the SELinux-hide policy parsing fix (#3936), balanced file references when wrapped files are reopened (tiann/KernelSU#3958), a mount_hide crash fix, and no console logging from atomic paths.
+- SUSFS v2.3.0 at `487cbbb5` (Nov.2 2026), up from `cfa82d53`: a reworked SELinux-hide that uses the safer hash with full tuple comparison, and a reworked uid parser for the priority uid filter. SukiSU now renews the filter again after it rescans installed apps, so new apps are filtered at once. SUSFS's newest commits are not used: they build the priority uid filter only under a config option SukiSU does not have yet, and the kernel would not link.
+- KPM modules load through SukiSU's KernelPatch bridge, ABI 2, with the same `kptools-linux` and `kpimg` 0.14.0 files as v3.3.0.
+
+### Notes
+- The build checks the driver against manager v4.3.0-r1, not the latest SukiSU release. It warns when a newer manager is out.
+
+## v3.3.0 - Linux 5.10.270 (Oct.30 2026)
+
+Releases #22 (does not boot), #23 and #24 (built without KPM).
+
+### Fixed
+- **Release #22 did not boot.** The phone went straight to Qualcomm CrashDump Mode, and recovery crashed too. Cause: `patch_linux` 0.14.0 embeds a 16-byte stub instead of the KernelPatch image, and it pointed the kernel's first instruction past the end of `Image`. From #23 on, KPM is patched with `kptools-linux` and the `kpimg` from the same 0.14.0 release, and the build fails unless `kptools-linux -l` shows a patched image with kpimg `0xe00`.
 
 ### New
 - **Crash logs are kept.** Flashing the zip installs `pstore-archive.sh` as a KernelSU `post-fs-data.d` script (from recovery only when `/data` is decrypted). At every boot it copies the previous boot's logs from `/sys/fs/pstore` into a new folder in `/data/adb/pstore/` and keeps the last 20 boots. See the README.
@@ -24,11 +40,12 @@
   - None of the 7,315 KMI symbols is removed or changes its CRC, so the ROM's vendor modules keep loading. 20 other exports change their CRC (Bluetooth L2CAP and `hci_conn_*`, `crypto_ecdh_*`); none is used by the in-tree modules.
   - Conflicts in 2 Qualcomm driver files, both built as modules: `drivers/dma/qcom/bam_dma.c` keeps LineageOS's teardown and adds the autosuspend cleanup; `drivers/rpmsg/qcom_glink_native.c` takes upstream's rpmsg device removal helper. LineageOS's code already had upstream's deadlock fix.
 - **SukiSU-Ultra manager v4.3.0.** Install `SukiSU_v4.3.0_41100-release.apk`. SukiSU's SUSFS-capable `builtin` branch now has the same uapi version as v4.3.0 (6), so the manager runs fully featured: Superuser and Module tabs, ksud install. Manager v4.2.0 no longer matches this kernel.
-- SukiSU-Ultra `builtin` at `6397fcb5` (Oct.25 2026). Newer `builtin` commits need a KernelPatch version that is not released yet; with them, KPM modules would not load.
+- SukiSU-Ultra `builtin` at `6397fcb5` (Oct.25 2026).
 - SUSFS v2.3.0 at `cfa82d53`: adds the priority uid filter and more SELinux-hide fixes. SukiSU updates the filter before it rescans installed apps, so an app installed since the last package change is added one change late.
-- KPM: `kptools-linux` and `kpimg` from SukiSU_KernelPatch_patch 0.14.0. KPM modules now load through SukiSU's new KernelPatch bridge.
+- KPM: `kptools-linux` and `kpimg` from SukiSU_KernelPatch_patch 0.14.0.
 
 ### Notes
+- KPM does not work in this version (`os error 95`). Fixed in v3.4.0.
 - The build checks the driver against manager v4.3.0, not the latest SukiSU release. It warns when a newer manager is out.
 - ACK reverted 3 fixes from 5.10.270 in code built into the kernel because they change the KMI: CVE-2025-38097 (espintcp), CVE-2026-43198 (`tcp_v6_syn_recv_sock()` race), CVE-2026-90329 (HID probe cleanup). They stay open.
 - 85 CVEs fixed upstream after 5.10.270 affect code built into this kernel and are still open.

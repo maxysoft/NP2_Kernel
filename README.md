@@ -5,7 +5,7 @@
 Fork of [MiguVT/NP2_Kernel](https://github.com/MiguVT/NP2_Kernel), switched to [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) with KPM support retained.
 
 > [!WARNING]
-> **KPM does not work in releases from #23 on.** The SukiSU-Ultra v4.3.0 manager shows KPM and version overrides as "unsupported", and `ksud kpm` fails with `os error 95`. The kernel pins SukiSU-Ultra `builtin` at `6397fcb`, which is older than the extension interface (ABI 5) that manager v4.3.0 uses. The newer `builtin` needs KPM bridge ABI 2, and no [SukiSU KernelPatch](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch) release supports it yet. Root, SUSFS and modules work.
+> **KPM does not work in v3.3.0 (releases #23 and #24).** The SukiSU-Ultra v4.3.0 manager shows KPM and version overrides as "unsupported", and `ksud kpm` fails with `os error 95`. Root, SUSFS and modules work. v3.4.0 pins a SukiSU-Ultra `builtin` that matches the manager and the [SukiSU KernelPatch](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch) image. This fix is not yet tested on a device.
 >
 > Parts of this fork (workflow changes, scripts, docs) were written with AI assistance. Review the code before use and flash at your own risk.
 
@@ -19,7 +19,7 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 - **[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)**: Kernel-level root (KernelSU fork)
 - **[SUSFS](https://gitlab.com/simonpunk/susfs4ksu)**: Hide root from banking apps, games, and safety checks
 - **[BaseBandGuard](https://github.com/vc-teahouse/Baseband-guard)**: Prevent apps and modules from modifying critical files
-- **KPM Support**: KPM modules via [KernelPatch by SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch). Not working from release #23 on, see the warning above
+- **KPM Support**: KPM modules via [KernelPatch by SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch). Not working in v3.3.0, see the warning above
 - **LZ4 1.10**: newer LZ4 library for zram and erofs, from [arter97's Nothing Phone 2 kernel](https://github.com/arter97/android_kernel_nothing_sm8475). See `SPEC.md` §R
 - **Lazy RCU** (on by default, `rcu_lazy` workflow input): the kernel batches deferred frees so idle CPUs wake less often. See `SPEC.md` §R
 - **Linux 5.10.270** (LineageOS build only): upstream LTS fixes from Google's `android12-5.10.270_r00` GKI release, merged onto LineageOS's 5.10.246 kernel. See `SPEC.md` §L

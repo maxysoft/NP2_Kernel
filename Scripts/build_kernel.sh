@@ -78,9 +78,9 @@ if [ "${KPM_SUPPORT}" = "true" ]; then
   echo "CONFIG_KALLSYMS=y" >> "${EXTRA_CFG}"
   echo "CONFIG_KALLSYMS_ALL=y" >> "${EXTRA_CFG}"
   echo "CONFIG_KPROBES=y" >> "${EXTRA_CFG}"
-  # Must equal the bridge ABI of the kpimg release downloaded below; bump both together.
-  if ! grep -q '^#define SUKISU_KPM_ABI_VERSION 1$' KernelSU/kernel/extension/kpm/bridge.h; then
-    echo "ERROR: SukiSU KPM bridge ABI differs from kpimg 0.14.0 (ABI 1); KPM would never load (SPEC V9)." >&2
+  # Must equal the ABI compiled into the kpimg below, not the one in its tag's source (SPEC V9).
+  if ! grep -q '^#define SUKISU_KPM_ABI_VERSION 2$' KernelSU/kernel/extension/kpm/bridge.h; then
+    echo "ERROR: SukiSU KPM bridge ABI differs from the pinned kpimg 0.14.0 (ABI 2); KPM would never load (SPEC V9)." >&2
     exit 1
   fi
 fi

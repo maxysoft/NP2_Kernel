@@ -163,7 +163,7 @@ jobs:
         LD=ld.lld HOSTLD=ld.lld
         CC=clang CXX=clang++
         HOSTCC=clang HOSTCXX=clang++
-        KSU_VERSION=41100
+        KSU_VERSION=41140
         O=out
 
     steps:
@@ -240,8 +240,9 @@ jobs:
       - name: Clone SUSFS
         if: ${{ inputs.susfs_support == true }}
         run: |
-          # Pinned: SUSFS v2.3.0 @ cfa82d53371b (2026-10-29). The branch carries no
+          # Pinned: SUSFS v2.3.0 @ 487cbbb5b4c9 (2026-11-02). The branch carries no
           # current tag (only 1.4.2-gki-android13-5.10 from 2024), so the SHA is the pin.
+          # Not its head: 3bd16375+ needs CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER, which builtin lacks (SPEC V9).
           # Full clone, not --depth=1: a shallow clone cannot check out a non-tip commit.
           #
           # Paired with the SukiSU `builtin` pin below, both ways: the kernel-side patch
@@ -253,7 +254,7 @@ jobs:
           branch="${{ inputs.susfs_branch || 'gki-android13-5.10' }}"
           git clone -b "$branch" https://gitlab.com/simonpunk/susfs4ksu.git
           if [ "$branch" = "gki-android13-5.10" ]; then
-            git -C susfs4ksu checkout cfa82d53371b2dacb3ed79e31cb62a9cc349b5d5
+            git -C susfs4ksu checkout 487cbbb5b4c93b01c0e2427e48414ca9efd4677b
           else
             echo "Non-default SUSFS branch '$branch' — no pin available, tracking tip"
           fi
@@ -261,10 +262,9 @@ jobs:
       - name: Setup SukiSU-Ultra
         run: |
           cd "$KERNEL_DIR"
-          # Pinned: SukiSU-Ultra `builtin` branch @ 6397fcb5d96e (2026-10-25), not its head.
-          # Its KPM bridge speaks ABI 1, like kpimg 0.14.0 in build_kernel.sh. From
-          # c02870ac on, builtin speaks ABI 2, which no KernelPatch release ships yet, and
-          # KPM loading fails with EOPNOTSUPP. Bump this pin and kpimg together.
+          # Pinned: SukiSU-Ultra `builtin` branch @ 1cfa57340590 (2026-11-01).
+          # Its KPM bridge speaks ABI 2, like the kpimg in build_kernel.sh. Bump this pin
+          # and kpimg together, or KPM loading fails with EOPNOTSUPP.
           # Deliberately NOT a release tag. Release tags, main and dev declare no KSU_SUSFS
           # symbol at all, so `CONFIG_KSU_SUSFS=y` was silently dropped by olddefconfig
           # and SUSFS compiled out of every build. `builtin` is the SUSFS-integrated
@@ -272,7 +272,7 @@ jobs:
           # fs/susfs.c + include/linux/susfs.h from the susfs4ksu patch below.
           # setup.sh is fetched at the same commit; it swallows a failed checkout
           # ("git checkout ... || echo"), so the ref is verified afterwards.
-          SUKISU_REV=6397fcb5d96e8f4953c71e02c73f8c6800541bff
+          SUKISU_REV=1cfa57340590971cba7521ed536da8ebbedc5f0a
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
 
@@ -280,11 +280,11 @@ jobs:
         id: manager
         env:
           GH_TOKEN: ${{ github.token }}
-          MGR_TAG: v4.3.0
+          MGR_TAG: v4.3.0-r1
         run: |
           rel=$(gh api "repos/SukiSU-Ultra/SukiSU-Ultra/releases/tags/$MGR_TAG")
           tag=$(jq -r .tag_name <<<"$rel")
-          mgr_code=$(jq -r '.assets[].name' <<<"$rel" | sed -nE 's/^SukiSU_v[0-9.]+_([0-9]+)-release\.apk$/\1/p')
+          mgr_code=$(jq -r '.assets[].name' <<<"$rel" | sed -nE 's/^SukiSU_v[^_]+_([0-9]+)-release\.apk$/\1/p')
           mgr_hdr=$(gh api -H 'Accept: application/vnd.github.raw' "repos/SukiSU-Ultra/SukiSU-Ultra/contents/uapi/supercall.h?ref=$tag")
           mgr_uapi=$(sed -nE 's/.*KERNEL_SU_UAPI_VERSION[^0-9]+([0-9]+).*/\1/p' <<<"$mgr_hdr")
           drv_code=$(sed -nE 's/.*KSU_VERSION=([0-9]+).*/\1/p' <<<"$MAKE_ARGS")
