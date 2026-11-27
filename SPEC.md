@@ -141,11 +141,11 @@ After signing, `apksigner verify` must report v2 `true`, v3 and v3.1 `false`, on
 
 ## §L — LineageOS LTS backport (`patches/lineage-lts`)
 
-**L1** — The source is the latest ACK GKI release tag, now `android12-5.10.270_r00`, not kernel.org stable. `lineage-23.2` declares `BRANCH=android12-5.10` and `KMI_GENERATION=9` in `build.config.common`, and already merges these tags (`Merge tag 'android12-5.10.246_r00'`). The tag keeps KMI generation 9 and carries ACK's reverts of ABI-breaking LTS commits. Conflicted files when `.269_r00` was merged into `lineage-23.2`: tag 13, ACK `android12-5.10-lts` head 13, kernel.org `v5.10.271` 83.
+**L1** — The source is ACK, not kernel.org stable: the latest GKI release tag, or the head of the ACK branch `android12-5.10-lts` when it is ahead of the tags. Now it is the branch head `3c6d52210784` ("Merge 5.10.275 into android12-5.10-lts", 2026-11-23), because no release tag for 5.10.275 exists: the newest tag is `android12-5.10.272_r00` and the `android12-5.10` branch is at 5.10.272. The head contains `android12-5.10.272_r00`, so nothing of that release is lost. `lineage-23.2` declares `BRANCH=android12-5.10` and `KMI_GENERATION=9` in `build.config.common`, and already merges these tags (`Merge tag 'android12-5.10.246_r00'`). Tags and the branch head keep KMI generation 9 and carry ACK's reverts of ABI-breaking LTS commits. Conflicted files when `.269_r00` was merged into `lineage-23.2`: tag 13, ACK `android12-5.10-lts` head 13, kernel.org `v5.10.271` 83.
 
 **L2** — The vanilla AnyKernel3 flash replaces only `Image`; the ROM's vendor modules stay. They load only if every symbol they import keeps its `CONFIG_MODVERSIONS` CRC. Out-of-tree Qualcomm modules are built with `KMI_ENFORCED=1` against `android/abi_gki_aarch64_qcom`, so only KMI-listed symbols matter for them; in-tree `=m` modules can import any export.
 
-**L3** — The patch is the full `git diff` of a local merge, applied by the "Apply extra patches" step with GNU `patch -p1`. Its header records base, tag and merge commits. On `lineage-23.2` @ `4ec5491f6b5f` it reproduces the merge tree exactly (verified with GNU patch 2.7.6, the version on `ubuntu-latest`). Because `patch` accepts fuzz, the step first asserts that the clone's `HEAD` equals the header's `Base:` commit, for any patch that has one. If LineageOS moves `lineage-23.2`, or `kernel_repo`/`kernel_branch` is overridden without clearing `extra_patches_dir`, the build fails there: regenerate (or clear the input).
+**L3** — The patch is the full `git diff` of a local merge, applied by the "Apply extra patches" step with GNU `patch -p1`. Its header records the base, the merged ACK commit and the merge commit. On `lineage-23.2` @ `4ec5491f6b5f` it reproduces the merge tree exactly (verified with GNU patch 2.7.6, the version on `ubuntu-latest`). Because `patch` accepts fuzz, the step first asserts that the clone's `HEAD` equals the header's `Base:` commit, for any patch that has one. If LineageOS moves `lineage-23.2`, or `kernel_repo`/`kernel_branch` is overridden without clearing `extra_patches_dir`, the build fails there: regenerate (or clear the input).
 
 Regenerate for a newer tag `<N>` by merging it on top of the vendored merge of the previous tag `<P>`, so the earlier resolutions carry over and only the new delta conflicts (done for `.270_r00`). The merge base is `<P>`, so shallow history is enough:
 
@@ -169,7 +169,16 @@ git -C kernel merge --no-ff android12-5.10.<N>_r00   # resolve conflicts, see L4
 git -C kernel -c diff.renameLimit=20000 diff origin/lineage-23.2 HEAD > patches/lineage-lts/0001-android12-5.10.<N>_r00.patch   # prepend the header
 ```
 
-Check `KMI_GENERATION` is still 9 in the new tag, then re-run the L5 checks.
+For a branch head instead of a tag (done for 5.10.275), fetch the branch, merge the remote ref and name the patch after the branch and the sublevel. The second parent of the rebuilt previous merge is then the commit in that patch's `Merge:` header line:
+
+```bash
+git -C kernel fetch --shallow-since=<a month before P> https://android.googlesource.com/kernel/common \
+  'refs/heads/android12-5.10-lts:refs/remotes/ack/android12-5.10-lts'
+git -C kernel merge --no-ff refs/remotes/ack/android12-5.10-lts   # resolve conflicts, see L4
+git -C kernel -c diff.renameLimit=20000 diff origin/lineage-23.2 HEAD > patches/lineage-lts/0001-android12-5.10-lts-5.10.<N>.patch   # prepend the header
+```
+
+Check `KMI_GENERATION` is still 9 in the new tag or head, then re-run the L5 checks.
 
 **L4** — Conflict resolutions for `.269_r00` (13 files). Lineage carries Qualcomm CLO versions of the qcom drivers, so every code conflict keeps Lineage's code and ports the LTS fix only where the fixed code exists. Only `fs/file.c` and the build scripts end up in `Image`. The qrtr, slimbus, mhi, sdhci-msm, sysmon and glink drivers are `=m`: CI builds only `Image` and the zip ships no modules, so on the phone the ROM's 5.10.246 modules keep running, and neither these resolutions nor any LTS fix in the 297 `=m` drivers reaches it.
 
@@ -189,6 +198,15 @@ Conflict resolutions for `.270_r00`, merged on top of the `.269_r00` merge (2 fi
 - `drivers/dma/qcom/bam_dma.c`: both sides (Lineage's IPC log teardown, then `pm_runtime_dont_use_autosuspend()`).
 - `drivers/rpmsg/qcom_glink_native.c`: upstream's `qcom_glink_remove_rpmsg_device()` in both close paths instead of Lineage's inline copies, and the unused `chinfo` local in `qcom_glink_rx_close_ack()` dropped. CLO's `qcom_glink_destroy_ept()` already does not unregister the rpdev, which is where upstream's deadlock fix ends up.
 
+Conflict resolutions for the `android12-5.10-lts` head `3c6d52210784` (5.10.275), merged on top of the `.270_r00` merge (7 paths). The delta is 3066 commits in 2319 files. It touches 38 files Lineage diverges in; the 32 others auto-merged, one of them corrected after review (slimbus, below).
+
+- `Documentation/devicetree/bindings`: kept Lineage's symlink, dropped upstream's changes to `vendor-prefixes.yaml` and `media/allwinner,sun4i-a10-video-engine.yaml`.
+- `drivers/clk/qcom/clk-rcg2.c` (`=m`): Lineage. CLO has its own `clk_rcg2_set_force_enable()` and `clk_rcg2_clear_force_enable()`, so upstream's copies are dropped; the fix is ported into CLO's poll loop (a `clk_rcg2_is_enabled()` error is returned instead of read as "enabled"). The second half of the fix, clearing the force enable when `clk_rcg2_configure()` fails, auto-merged.
+- `net/qrtr/af_qrtr.c` (`=m`): Lineage, unchanged. CLO's `qrtr_send_resume_tx()` already releases the node when the control packet allocation fails.
+- `include/linux/shmem_fs.h` (`Image`): upstream's out-of-line `shmem_file()` declaration and stub, with Lineage's `shmem_mapping()` declaration (no `extern`).
+- `scripts/sign-file.c` (host tool, not built: `CONFIG_MODULE_SIG` is off): upstream's version. Its `USE_PKCS11_ENGINE` guard covers the `OPENSSL_NO_ENGINE` guards Lineage had added.
+- `drivers/slimbus/messaging.c` (`=m`, auto-merged): Lineage's `return ret;` kept after `slim_alloc_txn_tid()` fails. Upstream's fix changed it to `goto slim_xfer_err` because upstream takes the runtime-PM reference first; CLO allocates the tid before `pm_runtime_get_sync()`, so the error label's `pm_runtime_put_autosuspend()` would drop a reference never taken.
+
 **L5** — Verified 2026-10-13, vanilla trees (no KernelSU/SUSFS/BBG), clang 18.1.3, `LTO_NONE` and no CFI because the full-LTO link needs more than 12 GB RAM (CI keeps full LTO):
 
 - Base and merged trees both build `Image` and all 289 modules; the merged modules include every resolved Qualcomm driver, with no warnings in those files.
@@ -206,11 +224,25 @@ Not verified locally: the KernelSU/SUSFS/BBG/KPM build and the LTO link (CI only
 - The patch reproduces the merge tree with GNU patch 2.7.6; `patches/lz4` and `patches/rcu-lazy` apply with no fuzz, the SUSFS 50_ patch (`cfa82d53`) with offsets only, both Droidspaces patches cleanly.
 - The delta adds no `call_rcu()` caller (§R3) and uses no `ANDROID_KABI` slot (D2).
 
+`android12-5.10-lts` head `3c6d52210784` (5.10.275), verified 2026-11-27 the same way against the `.270_r00` merge (same build image, clang 18.1.3):
+
+- Both trees build `Image` and all 289 modules; the new build log has no warning at all.
+- `KMI_GENERATION` is 9. The 29 `android/abi_gki_aarch64*` symbol lists name 7298 symbols, 7260 of them exported by the base `vmlinux`: 0 removed, 0 CRC-changed.
+- The in-tree modules built from the base tree import 2133 vmlinux symbols; none is removed or CRC-changed.
+- Outside the lists: 3 exports removed (`dev_pm_enable_wake_irq`, `dev_pm_disable_wake_irq`, `l2tp_session_set_header_len`), 9 added, 104 CRCs changed (kvm 50, device-mapper `dm_*` 31, `l2tp_*` 12, `nf_reject`/`nf_send_*` 10, `nfc_get_local_general_bytes`). An out-of-tree vendor module that imports one of them would fail to load; see the `KMI_ENFORCED` assumption above.
+- ACK accepted one ABI break in the delta, `struct usb_udc` (two new members, `android/abi_gki_aarch64.xml.allowed_breaks`). The struct is private to `drivers/usb/gadget/udc/core.c` and no CRC of a listed symbol moved.
+- `.config`: `CONFIG_ARM64_WORKAROUND_BROKEN_AMU_CONSTCNT=y` and `CONFIG_ARM64_ERRATUM_3821522=y` are new; `GUP_BENCHMARK` was renamed `GUP_TEST` (still off). Nothing else differs.
+- The patch reproduces the merge tree with GNU patch 2.7.6; `patches/lz4`, `patches/rcu-lazy` and both Droidspaces patches apply with no fuzz. The SUSFS 50_ patch (`1bea9e8f`) applies with offsets in 40 hunks and fuzz 2 in one: `fs/namespace.c` hunk 8, where upstream added `MNT_UMOUNT` to a context line in `clone_mnt()`. The result was read and is correct.
+- The delta adds one `call_rcu()` caller (§R3), `flow_offload_free()` in `net/netfilter/nf_flow_table_core.c`, which is not built (`CONFIG_NF_FLOW_TABLE` is off). It uses no `ANDROID_KABI` slot (D2).
+- CVEs: `docs/cve-5.10.275.md`.
+
 **L6** — Runtime risk of the flashed kernel comes from the built-in LTS changes; the boot test is the check. The three risks below sit in `=m` drivers and take effect only if modules built from this tree are installed as well:
 
 - High: `net/qrtr/ns.c` lookup limit 128. Upstream raised it from 64 after an SM6475 phone hung at the boot animation; 128 is untested on SM8475. Too low means modem, audio or sensor services missing at boot. `dmesg` shows `exceeds max lookup limit`; the knob is `QRTR_NS_MAX_LOOKUPS`.
 - Medium: slimbus IRQ ordering changes audio probe order on the CLO driver.
 - Low: QRTR sockets fail inside a container with its own network namespace (Droidspaces only).
+
+The 5.10.275 source is a branch head, not a GKI release: Google has not run its release qualification on it. The step from 5.10.270 is also the largest so far (five LTS releases, 273 CVE fixes built into `Image`). On the boot test, check USB (gadget and UDC teardown changed: plug, unplug, switch between charging, file transfer and tethering), mounts and unmounts including the SUSFS and KernelSU module mounts (`fs/namespace.c` changed under the SUSFS patch), suspend and resume, and `dmesg` for new warnings. If it misbehaves, the fallback is a `android12-5.10.272_r00` patch made the same way.
 
 **L7** — NothingOSS is not backported. `sm8475/b/mr` takes LTS as squashed code drops (5.10.252, highest real stable ancestor 5.10.233); merging the tag conflicts in 113 files. The `build-all.yml` NothingOSS job does not pass `extra_patches_dir`.
 
