@@ -1,6 +1,21 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
+## v3.6.0 - Own SukiSU Nova manager build (Nov.27 2026)
+
+### Changed
+- **Own manager build.** Each release now carries `SukiSU_Nova_v3.0.0-mxy_35000-arm64-v8a-release.apk` and its sha256. CI builds it from the SukiSU Nova v3.0.0 source and signs it with this project's key. Install exactly this APK.
+- **The kernel accepts only that key.** The official SukiSU Nova APK no longer works with this kernel. Uninstall it, then install the APK from the release: Android does not install an app over one signed with another key. Superuser grants are kept: the kernel stores them in `/data/adb/ksu/.allowlist`, not in the app. Modules stay in `/data/adb/modules`. The app's own settings, such as theme and appearance, are lost with the uninstall.
+- The manager's update check reads this project's releases instead of SukiSU Nova's. It only offers an APK whose link points to this project's releases.
+- A manager rebuilt with only this project's changes keeps version code 35000, so the update check does not offer it: install the APK from the newer release over the installed one.
+- The Theme Store is removed from the manager. Local themes and colour settings still work.
+- `kptools` and `kpimg` inside the manager come from a fixed SukiSU_patch commit, checked by sha256. The `kpimg` is the same file the kernel build uses.
+
+### Security
+- Module WebUI pages can no longer load anything from the internet. Before, a link, form or frame could load a remote site inside the module page, where it could call the root interface (`ksu.exec`). Links to other sites open in the browser. Modules whose page needs online fonts, scripts or APIs stop working partly or fully.
+- The manager is signed in a separate CI job after the build, so the signing key never reaches the Gradle build or its downloaded dependencies. The APK carries only a v2 signature, the only kind the kernel accepts.
+- The kernel's list of trusted manager keys has one entry instead of 7 fork keys.
+
 ## v3.5.0 - SukiSU Nova manager v3.0.0 (Nov.27 2026)
 
 ### Changed

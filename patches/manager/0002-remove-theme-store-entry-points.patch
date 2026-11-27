@@ -1,0 +1,198 @@
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/navigation3/IntentDispatcher.kt b/manager/app/src/main/java/com/sukisu/nova/ui/navigation3/IntentDispatcher.kt
+index 986aa30..77cce74 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/navigation3/IntentDispatcher.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/navigation3/IntentDispatcher.kt
+@@ -177,11 +177,6 @@ fun IntentDispatcher(intentChannel: ReceiveChannel<Intent>) {
+     CollectIntentChannel(intentChannel) { intent ->
+         if (!isManager) return@CollectIntentChannel
+ 
+-        parseThemeStoreLink(intent)?.let { destination ->
+-            navigator.push(destination)
+-            return@CollectIntentChannel
+-        }
+-
+         val themeUri = extractThemePackageUri(context, intent)
+         if (themeUri != null) {
+             // Forward the URI through the route. The appearance destination owns a per-entry
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/AdaptiveThemeBuilderScreen.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/AdaptiveThemeBuilderScreen.kt
+index 6951b1e..bfce541 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/AdaptiveThemeBuilderScreen.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/AdaptiveThemeBuilderScreen.kt
+@@ -263,21 +263,6 @@ fun AdaptiveThemeBuilderScreen() {
+                                 )
+                             }
+                         }
+-                        Spacer(Modifier.height(10.dp))
+-                        Button(
+-                            onClick = ::publishToStore,
+-                            shapes = ButtonDefaults.shapes(),
+-                            modifier = Modifier.fillMaxWidth(),
+-                        ) {
+-                            MaterialIcon(
+-                                imageVector = Icons.Rounded.FileUpload,
+-                                contentDescription = null,
+-                            )
+-                            Spacer(Modifier.width(8.dp))
+-                            MaterialText(
+-                                text = stringResource(R.string.theme_adaptive_builder_publish),
+-                            )
+-                        }
+                         Spacer(Modifier.height(6.dp))
+                         MaterialText(
+                             text = stringResource(R.string.theme_adaptive_export_hint),
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMaterial.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMaterial.kt
+index 76c5855..bf4053a 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMaterial.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMaterial.kt
+@@ -1845,15 +1845,6 @@ fun ColorPaletteScreenMaterial(
+                             },
+                         )
+                     }
+-                    item(visible = true) {
+-                        val storeTitle = customText(CustomTextKey.PAGE_THEME_STORE)
+-                        SegmentedListItem(
+-                            onClick = actions.onOpenThemeStore,
+-                            headlineContent = { Text(storeTitle) },
+-                            supportingContent = { Text(stringResource(id = R.string.theme_store_summary)) },
+-                            leadingContent = { IconTile(Icons.Rounded.Storefront, storeTitle) },
+-                        )
+-                    }
+                     item(visible = true) {
+                         SegmentedListItem(
+                             onClick = {
+@@ -2026,10 +2017,6 @@ fun ColorPaletteScreenMaterial(
+         hasImageEffects = state.imageEffectsPresent,
+         immersiveHome = state.homeLayout == HomeLayout.IMMERSIVE,
+         hasBottomBarIcons = uiState.bottomBarIcons.isNotEmpty(),
+-        onUpload = { options ->
+-            showExportDialog = false
+-            actions.onUploadTheme(context, options)
+-        },
+     )
+ }
+ 
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMiuix.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMiuix.kt
+index e98d75b..0912c65 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMiuix.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/colorpalette/ColorPaletteScreenMiuix.kt
+@@ -1867,19 +1867,6 @@ fun ColorPaletteScreenMiuix(
+                         ) {
+                             Column {
+                                 HorizontalDivider()
+-                                BasicComponent(
+-                                    title = customText(CustomTextKey.PAGE_THEME_STORE),
+-                                    summary = stringResource(id = R.string.theme_store_summary),
+-                                    startAction = {
+-                                        Icon(
+-                                            Icons.Rounded.Storefront,
+-                                            modifier = Modifier.padding(end = 6.dp),
+-                                            contentDescription = customText(CustomTextKey.PAGE_THEME_STORE),
+-                                            tint = colorScheme.onBackground
+-                                        )
+-                                    },
+-                                    onClick = actions.onOpenThemeStore,
+-                                )
+                                 BasicComponent(
+                                     title = stringResource(id = R.string.theme_import),
+                                     summary = stringResource(id = R.string.theme_import_summary),
+@@ -2090,10 +2077,6 @@ fun ColorPaletteScreenMiuix(
+         hasImageEffects = state.imageEffectsPresent,
+         immersiveHome = state.homeLayout == HomeLayout.IMMERSIVE,
+         hasBottomBarIcons = uiState.bottomBarIcons.isNotEmpty(),
+-        onUpload = { options ->
+-            showExportDialog = false
+-            actions.onUploadTheme(context, options)
+-        },
+     )
+ 
+     ThemeFullscreenPreviewDialog(
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMaterial.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMaterial.kt
+index 26300fa..752f7b4 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMaterial.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMaterial.kt
+@@ -250,14 +250,6 @@ private fun TopBar(
+                 overflow = TextOverflow.Ellipsis,
+             )
+         },
+-        navigationIcon = {
+-            IconButton(onClick = onOpenThemeStore) {
+-                Icon(
+-                    imageVector = Icons.Rounded.Storefront,
+-                    contentDescription = customText(CustomTextKey.PAGE_THEME_STORE),
+-                )
+-            }
+-        },
+         actions = { RebootListPopup() },
+         colors = expressiveTopAppBarColors(
+             containerColor = if (hasCustomBackground) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer,
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMiuix.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMiuix.kt
+index 9be01f6..20f316e 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMiuix.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/home/HomeMiuix.kt
+@@ -279,15 +279,6 @@ private fun TopBar(
+         TopAppBar(
+             color = Color.Transparent,
+             title = customText(CustomTextKey.HOME_TITLE),
+-            navigationIcon = {
+-                IconButton(onClick = onOpenThemeStore) {
+-                    Icon(
+-                        imageVector = Icons.Rounded.Storefront,
+-                        contentDescription = customText(CustomTextKey.PAGE_THEME_STORE),
+-                        tint = colorScheme.onBackground
+-                    )
+-                }
+-            },
+             actions = {
+                 RebootListPopupMiuix()
+             },
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMaterial.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMaterial.kt
+index 72dddb1..cf85840 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMaterial.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMaterial.kt
+@@ -216,21 +216,6 @@ fun SettingPagerMaterial(
+                             }
+                         )
+                     }
+-                    add {
+-                        val themeStoreTitle = customText(CustomTextKey.PAGE_THEME_STORE)
+-                        SegmentedListItem(
+-                            onClick = actions.onOpenThemeStore,
+-                            headlineContent = { Text(themeStoreTitle) },
+-                            supportingContent = { Text(stringResource(id = R.string.theme_store_summary)) },
+-                            leadingContent = { IconTile(Icons.Filled.Storefront, themeStoreTitle) },
+-                            trailingContent = {
+-                                Icon(
+-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+-                                    null
+-                                )
+-                            }
+-                        )
+-                    }
+ 
+                 }
+             )
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMiuix.kt b/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMiuix.kt
+index 2726425..7ee8ed7 100644
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMiuix.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/screen/settings/SettingsMiuix.kt
+@@ -263,20 +263,6 @@ fun SettingPagerMiuix(
+                             },
+                             onClick = actions.onOpenTheme
+                         )
+-                        val themeStoreTitle = customText(CustomTextKey.PAGE_THEME_STORE)
+-                        ArrowPreference(
+-                            title = themeStoreTitle,
+-                            summary = stringResource(id = R.string.theme_store_summary),
+-                            startAction = {
+-                                Icon(
+-                                    Icons.Rounded.Storefront,
+-                                    modifier = Modifier.padding(end = 6.dp),
+-                                    contentDescription = themeStoreTitle,
+-                                    tint = colorScheme.onBackground
+-                                )
+-                            },
+-                            onClick = actions.onOpenThemeStore
+-                        )
+ 
+                     }
+ 

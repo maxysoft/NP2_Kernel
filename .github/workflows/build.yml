@@ -271,6 +271,8 @@ jobs:
       - name: Setup SukiSU-Nova
         env:
           SUSFS_SUPPORT: ${{ inputs.susfs_support }}
+          MANAGER_CERT_SIZE: '0x2fb'
+          MANAGER_CERT_SHA256: 6eb6e32ec40d8e6a9cf09bd85afaca8b58be4c7040c597da13ebc896a1cc907f
         run: |
           if [ "$SUSFS_SUPPORT" != "true" ]; then
             echo "::error::susfs_support must stay true. With SUSFS off, SukiSU builds in preinit/common/runner/runner_xxd.h, a prebuilt binary that cannot be checked against source and runs in the PID 1 boot path (SPEC V14)."
@@ -294,6 +296,16 @@ jobs:
           # Keep the if form: under set -e a "! grep -q" line never stops the script, so the check could not fail.
           if grep -q 'ksu_sig_fallback_init()' KernelSU/kernel/ksu_main.c; then
             echo "::error::ksu_sig_fallback_init() is still called in KernelSU/kernel/ksu_main.c. The signature fallback must not be built in (SPEC V13)."
+            exit 1
+          fi
+          sign=KernelSU/kernel/manager/apk_sign.c
+          sed -i '/^} apk_sign_keys\[\] = {$/,/^};$/{/^[[:space:]]*{ /d}' "$sign"
+          sed -i "/^} apk_sign_keys\[\] = {\$/a\\    { $MANAGER_CERT_SIZE, \"$MANAGER_CERT_SHA256\" }," "$sign"
+          table=$(sed -n '/^} apk_sign_keys\[\] = {$/,/^};$/p' "$sign")
+          want=$(printf '} apk_sign_keys[] = {\n    { %s, "%s" },\n};' "$MANAGER_CERT_SIZE" "$MANAGER_CERT_SHA256")
+          if [ "$table" != "$want" ]; then
+            echo "::error::$sign must trust only the project manager key ($MANAGER_CERT_SIZE, $MANAGER_CERT_SHA256) (SPEC V13). Found:"
+            echo "$table"
             exit 1
           fi
 
@@ -486,8 +498,13 @@ jobs:
           name: rej-NP2-SukiSU-Nova
           path: rej/
 
+  manager:
+    if: ${{ !inputs.skip_release }}
+    uses: ./.github/workflows/build-manager.yml
+    secrets: inherit
+
   release:
-    needs: build
+    needs: [build, manager]
     # Under workflow_call, github.event_name is the caller's event, so it cannot tell a direct dispatch from build-all.yml.
     if: ${{ !inputs.skip_release }}
     runs-on: ubuntu-latest
@@ -501,6 +518,11 @@ jobs:
         with:
           name: ${{ env.ZIP }}
 
+      - name: Download manager APK
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.manager.outputs.artifact }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
@@ -510,7 +532,10 @@ jobs:
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
             **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}  **Lazy RCU:** ${{ inputs.rcu_lazy && !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
-            **Manager:** [SukiSU Nova ${{ needs.build.outputs.manager }}](https://github.com/SukiSU-Nova/SukiSU-Nova/releases/tag/${{ needs.build.outputs.manager_tag }}) — install exactly this manager version. A newer manager may not work with this kernel.
-          files: "${{ env.ZIP }}.zip"
+            **Manager:** `${{ needs.manager.outputs.artifact }}.apk`, attached below: SukiSU Nova ${{ needs.build.outputs.manager }} built from source and signed with this project's key — install exactly this manager version. The kernel accepts no other manager APK. Uninstall the official SukiSU Nova app first: Android does not install over an app signed with another key.
+          files: |
+            ${{ env.ZIP }}.zip
+            ${{ needs.manager.outputs.artifact }}.apk
+            ${{ needs.manager.outputs.artifact }}.apk.sha256
           draft: false
           prerelease: false

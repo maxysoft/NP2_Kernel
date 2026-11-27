@@ -1,0 +1,34 @@
+diff --git a/manager/app/src/main/java/com/sukisu/nova/ui/webui/WebViewHelper.kt b/manager/app/src/main/java/com/sukisu/nova/ui/webui/WebViewHelper.kt
+--- a/manager/app/src/main/java/com/sukisu/nova/ui/webui/WebViewHelper.kt
++++ b/manager/app/src/main/java/com/sukisu/nova/ui/webui/WebViewHelper.kt
+@@ -135,6 +135,19 @@
+                     super.onPageStarted(view, url, favicon)
+                 }
+ 
++                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
++                    val url = request.url
++                    val internal = when (url.scheme?.lowercase()) {
++                        "https" -> url.host.equals(WEB_DOMAIN, ignoreCase = true) || url.host.equals(INTERNAL_BLOB_DOWNLOAD_HOST, ignoreCase = true)
++                        KSU_SCHEME -> url.host.equals(ICON_HOST, ignoreCase = true)
++                        "blob" -> url.schemeSpecificPart.startsWith("https://$WEB_DOMAIN/")
++                        "about" -> true
++                        else -> false
++                    }
++                    if (!internal) webUIState.downloadInterface?.openExternal(url.toString())
++                    return !internal
++                }
++
+                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                     val url = request.url
+ 
+@@ -169,7 +182,10 @@
+                             }
+                         }
+                     }
++                    if (url.scheme.equals("data", ignoreCase = true)) return null
++                    // Returning null here sends the request to the network: anything not served locally must get the blocked response.
+                     return webViewAssetLoader.shouldInterceptRequest(url)
++                        ?: WebResourceResponse("text/plain", null, 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                 }
+ 
+                 override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {

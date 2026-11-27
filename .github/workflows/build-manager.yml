@@ -1,0 +1,183 @@
+name: Build SukiSU Nova manager
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      artifact:
+        description: 'Artifact with the signed manager APK and its .sha256 (also the APK base name)'
+        value: ${{ jobs.sign.outputs.artifact }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  BUILD_TOOLS: 37.0.0
+  APK_NAME: SukiSU_Nova_v3.0.0-mxy_35000-arm64-v8a-release
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      NOVA_TAG: v3.0.0
+      NOVA_REV: c60f21b9e00e35e898f8d21e0612465b76b9beec
+      NDK_VERSION: 29.0.14206865
+      RUST_VERSION: 1.100.0
+      KPTOOLS_SHA256: 3129cafd6fd0d9fdd6375b1b760c215cd11f94b3ce6eb13dc437a04d24d99244
+      KPIMG_SHA256: ab020f31ca1c058603917e46d8a6691fbce0dd5cdc135a9cd8dc780e89472716
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Clone SukiSU Nova
+        run: |
+          git clone --depth=1 --branch "$NOVA_TAG" https://github.com/SukiSU-Nova/SukiSU-Nova.git nova
+          test "$(git -C nova rev-parse HEAD)" = "$NOVA_REV"
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Patch manager
+        run: Scripts/patch-manager.sh nova
+
+      - name: Setup JDK
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21.0.13'
+
+      - name: Install Android SDK packages
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" "build-tools;$BUILD_TOOLS" "platforms;android-37.0"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
+      - name: Setup Rust
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal --target aarch64-linux-android
+
+      - name: Build ksud
+        working-directory: nova
+        run: |
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo "+$RUST_VERSION" build --locked --release --target aarch64-linux-android --manifest-path userspace/ksud/Cargo.toml
+          install -D target/aarch64-linux-android/release/ksud manager/app/src/main/jniLibs/arm64-v8a/libksud.so
+
+      - name: Build APK
+        working-directory: nova/manager
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Check build output
+        working-directory: nova/manager/app/build
+        run: |
+          printf '%s  %s\n' "$KPTOOLS_SHA256" tmp/downloadKpmTools/kptools-android "$KPIMG_SHA256" tmp/downloadKpmTools/kpimg | sha256sum -c -
+          apks=(outputs/apk/release/*.apk)
+          if [ "${#apks[@]}" != 1 ] || [ ! -f "${apks[0]}" ]; then
+            echo "::error::Expected exactly one release APK, found: ${apks[*]}"
+            exit 1
+          fi
+          mv "${apks[0]}" "$GITHUB_WORKSPACE/unsigned.apk"
+
+      - name: Upload unsigned APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.APK_NAME }}-unsigned
+          path: unsigned.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      artifact: ${{ steps.apk.outputs.artifact }}
+    env:
+      CERT_SHA256: 6eb6e32ec40d8e6a9cf09bd85afaca8b58be4c7040c597da13ebc896a1cc907f
+    steps:
+      - name: Download unsigned APK
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.APK_NAME }}-unsigned
+
+      - name: Setup JDK
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '21.0.13'
+
+      - name: Install build-tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;$BUILD_TOOLS"
+
+      - name: Sign APK
+        env:
+          MANAGER_KEYSTORE: ${{ secrets.MANAGER_KEYSTORE }}
+          MANAGER_KEYSTORE_PASSWORD: ${{ secrets.MANAGER_KEYSTORE_PASSWORD }}
+          MANAGER_KEY_ALIAS: ${{ secrets.MANAGER_KEY_ALIAS }}
+          MANAGER_KEY_PASSWORD: ${{ secrets.MANAGER_KEY_PASSWORD }}
+        run: |
+          for s in MANAGER_KEYSTORE MANAGER_KEYSTORE_PASSWORD MANAGER_KEY_ALIAS MANAGER_KEY_PASSWORD; do
+            if [ -z "${!s}" ]; then
+              echo "::error::Repository secret $s is not set. The manager APK must be signed with the project key (SPEC V15)."
+              exit 1
+            fi
+          done
+          bt=$ANDROID_HOME/build-tools/$BUILD_TOOLS
+          ks=$RUNNER_TEMP/manager.p12
+          trap 'rm -f "$ks"' EXIT
+          (umask 077 && base64 -d <<<"$MANAGER_KEYSTORE" > "$ks")
+          "$bt/zipalign" -P 16 -f 4 unsigned.apk aligned.apk
+          "$bt/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-pass env:MANAGER_KEYSTORE_PASSWORD \
+            --ks-key-alias "$MANAGER_KEY_ALIAS" --key-pass env:MANAGER_KEY_PASSWORD \
+            --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled false --v4-signing-enabled false \
+            --out "$APK_NAME.apk" aligned.apk
+
+      - name: Verify APK
+        id: apk
+        run: |
+          sig=$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK_NAME.apk")
+          badging=$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt2" dump badging "$APK_NAME.apk")
+          for want in 'Verified using v2 scheme (APK Signature Scheme v2): true' 'Verified using v3 scheme (APK Signature Scheme v3): false' 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false' 'Number of signers: 1' "Signer #1 certificate SHA-256 digest: $CERT_SHA256"; do
+            if ! grep -qxF -- "$want" <<<"$sig"; then
+              echo "::error::apksigner did not report '$want'. The kernel only accepts a v2-only signature by the project key (SPEC V13, V15)."
+              exit 1
+            fi
+          done
+          python3 -I - "$APK_NAME.apk" <<'EOF'
+          import struct, sys
+          d = open(sys.argv[1], 'rb').read()
+          cd = struct.unpack_from('<I', d, d.rfind(b'PK\x05\x06') + 16)[0]
+          size, magic = struct.unpack_from('<Q16s', d, cd - 24)
+          if magic != b'APK Sig Block 42':
+              sys.exit('::error::No APK signing block found.')
+          pos, ids = cd - size, []
+          while pos < cd - 24:
+              n, i = struct.unpack_from('<QI', d, pos)
+              ids.append(i)
+              pos += 8 + n
+          if ids.count(0x7109871a) != 1 or set(ids) - {0x7109871a, 0x42726577}:
+              sys.exit('::error::Signing block pairs %s: the kernel accepts only one v2 block plus verity padding (SPEC V13).' % [hex(i) for i in ids])
+          EOF
+          if ! grep -qxF "native-code: 'arm64-v8a'" <<<"$badging" || ! grep -q "^package: name='com.sukisu.nova' versionCode='35000' versionName='v3.0.0-mxy' " <<<"$badging"; then
+            echo "::error::APK identity is not com.sukisu.nova 35000 v3.0.0-mxy arm64-v8a only (SPEC V15)."
+            grep -E '^(package|native-code):' <<<"$badging"
+            exit 1
+          fi
+          sha256sum "$APK_NAME.apk" > "$APK_NAME.apk.sha256"
+          echo "artifact=$APK_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.apk.outputs.artifact }}
+          path: |
+            ${{ steps.apk.outputs.artifact }}.apk
+            ${{ steps.apk.outputs.artifact }}.apk.sha256
+          if-no-files-found: error
+          retention-days: 30

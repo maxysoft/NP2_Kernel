@@ -30,7 +30,7 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 1. Download the Kernel zip variant you want from [Releases](https://github.com/maxysoft/NP2_Kernel/releases)
 2. Boot into recovery (TWRP / OrangeFox)
 3. Flash the zip → reboot
-4. Install the [SukiSU Nova manager v3.0.0](https://github.com/SukiSU-Nova/SukiSU-Nova/releases/tag/v3.0.0) (`arm64-v8a` APK) to manage root. A newer manager may not work with the kernel. The old SukiSU Ultra manager does not work with this kernel: uninstall it. The Nova manager is a separate app (`com.sukisu.nova`).
+4. Install the SukiSU Nova manager APK attached to the same release (`SukiSU_Nova_v3.0.0-mxy_35000-arm64-v8a-release.apk`) to manage root. It is built from the SukiSU Nova v3.0.0 source and signed with this project's key, and the kernel accepts no other manager. Uninstall the official SukiSU Nova app and the old SukiSU Ultra manager first. Superuser grants and modules are kept.
 
 > **Backup your stock boot image first.** Bootloader must be unlocked. Use at your own risk.
 
