@@ -45,6 +45,10 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 
 **V12** — The job runs third-party code (the `curl | bash` setup scripts, `kptools-linux`, the kernel build) after the checkout, so the checkout must not leave the `GITHUB_TOKEN` on disk (`persist-credentials: false`) the `build` job gets `contents: read`. Only the `release` job gets `contents: write`; it downloads the zip artifact and runs no build-provided code, so nothing the build ran can tamper with the step that holds the write token. `build-all.yml` still grants `contents: write`: a caller must allow every permission its called workflow's jobs request, even the `release` job that `skip_release` turns off. Nothing in the job pushes with git; `actions/cache` and `upload-artifact` use the runner's own token, not `GITHUB_TOKEN` permissions.
 
+**V13** — Only `com.sukisu.nova`, signed with a built-in key, may become manager. SukiSU's signature fallback (`ksu_sig_fallback_init()` in `kernel/ksu_main.c`) otherwise crowns any APK signed with one of 7 built-in fork keys, whatever its package name, when no `com.sukisu.nova` manager is installed. The "Setup SukiSU-Nova" step deletes the call and fails the build if it is still present. The assert is an `if grep`, not `! grep`: under `set -e` a negated command never stops the script.
+
+**V14** — `susfs_support` must stay `true`; the "Setup SukiSU-Nova" step fails otherwise. With `CONFIG_KSU_SUSFS` unset, `ksu_main.c` includes `preinit/common/runner/runner_xxd.h`, an 11 KB prebuilt aarch64 ELF in a hex array. It is not in upstream KernelSU, cannot be checked against source, and would run in the PID 1 boot path. With SUSFS on, the runner is built from source.
+
 ## §I — Interfaces
 
 ### I.workflow-inputs — `build.yml` workflow_dispatch inputs
@@ -56,7 +60,7 @@ Three refs are deliberately NOT SHA-pinned: `kernel_repo`/`kernel_branch` (user-
 | `kernel_defconfig` | `gki_defconfig` | Space-separated; prefix `/` for kernel-root paths |
 | `extra_configs` | waipio vendor fragments | Space-separated config fragments |
 | `kpm_support` | `true` | Enables KPM + KALLSYMS + KPROBES |
-| `susfs_support` | `true` | Applies SUSFS patch + enables config |
+| `susfs_support` | `true` | Applies SUSFS patch + enables config. Must stay `true`: the build stops otherwise (V14) |
 | `susfs_branch` | `gki-android13-5.10` | Must match patch filename in susfs4ksu repo |
 | `bbg_support` | `true` | Applies BaseBandGuard setup script |
 | `susfs_force` | `false` | Set `true` to ignore SUSFS patch failures |

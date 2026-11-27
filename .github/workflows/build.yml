@@ -32,7 +32,7 @@ on:
         type: boolean
         default: true
       susfs_support:
-        description: 'Enable SUSFS support'
+        description: 'SUSFS support. Must stay true: with it off, SukiSU runs an unverifiable prebuilt binary at boot, so the build stops'
         required: false
         type: boolean
         default: true
@@ -96,6 +96,7 @@ on:
         type: boolean
         default: false
       susfs_support:
+        description: 'Must stay true: with it off, SukiSU runs an unverifiable prebuilt binary at boot, so the build stops'
         required: false
         type: boolean
         default: true
@@ -228,9 +229,12 @@ jobs:
           done
 
       - name: Clone sources
+        env:
+          KERNEL_BRANCH: ${{ inputs.kernel_branch || 'lineage-23.2' }}
+          KERNEL_REPO: ${{ inputs.kernel_repo || 'https://github.com/LineageOS/android_kernel_nothing_sm8475.git' }}
         run: |
-          git clone --depth=1 -b "${{ inputs.kernel_branch || 'lineage-23.2' }}" \
-            "${{ inputs.kernel_repo || 'https://github.com/LineageOS/android_kernel_nothing_sm8475.git' }}" \
+          git clone --depth=1 -b "$KERNEL_BRANCH" \
+            "$KERNEL_REPO" \
             "$KERNEL_DIR"
 
           # Pinned: AnyKernel3 @ af770f7b16cf (2026-08-22) — last commit before the
@@ -242,6 +246,8 @@ jobs:
 
       - name: Clone SUSFS
         if: ${{ inputs.susfs_support == true }}
+        env:
+          SUSFS_BRANCH: ${{ inputs.susfs_branch || 'gki-android13-5.10' }}
         run: |
           # Pinned: SUSFS v2.4.0 @ 1bea9e8fb4a6 (2026-11-09). The branch carries no
           # current tag (only 1.4.2-gki-android13-5.10 from 2024), so the SHA is the pin.
@@ -254,7 +260,7 @@ jobs:
           # susfs_set_priority_uid_filter) that only a matching fs/susfs.c defines. Bump
           # both pins together, or the link fails as run 35168531820 did:
           #   ld.lld: error: undefined symbol: ksu_install_su_fd
-          branch="${{ inputs.susfs_branch || 'gki-android13-5.10' }}"
+          branch="$SUSFS_BRANCH"
           git clone -b "$branch" https://gitlab.com/simonpunk/susfs4ksu.git
           if [ "$branch" = "gki-android13-5.10" ]; then
             git -C susfs4ksu checkout 1bea9e8fb4a64920f068e5da43f9751dfe601199
@@ -263,7 +269,13 @@ jobs:
           fi
 
       - name: Setup SukiSU-Nova
+        env:
+          SUSFS_SUPPORT: ${{ inputs.susfs_support }}
         run: |
+          if [ "$SUSFS_SUPPORT" != "true" ]; then
+            echo "::error::susfs_support must stay true. With SUSFS off, SukiSU builds in preinit/common/runner/runner_xxd.h, a prebuilt binary that cannot be checked against source and runs in the PID 1 boot path (SPEC V14)."
+            exit 1
+          fi
           cd "$KERNEL_DIR"
           # Pinned: SukiSU-Nova `builtin` branch @ 4bec532dd447.
           # Its KPM bridge speaks ABI 2, like the kpimg in build_kernel.sh. Bump this pin
@@ -278,6 +290,12 @@ jobs:
           SUKISU_REV=4bec532dd447e2852aa8932afa768255350c103a
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
+          sed -i '/^[[:space:]]*ksu_sig_fallback_init();[[:space:]]*$/d' KernelSU/kernel/ksu_main.c
+          # Keep the if form: under set -e a "! grep -q" line never stops the script, so the check could not fail.
+          if grep -q 'ksu_sig_fallback_init()' KernelSU/kernel/ksu_main.c; then
+            echo "::error::ksu_sig_fallback_init() is still called in KernelSU/kernel/ksu_main.c. The signature fallback must not be built in (SPEC V13)."
+            exit 1
+          fi
 
       - name: Check manager alignment
         id: manager
@@ -314,8 +332,10 @@ jobs:
 
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
+        env:
+          EXTRA_PATCHES_DIR: ${{ inputs.extra_patches_dir }}
         run: |
-          patch_dir="$GITHUB_WORKSPACE/${{ inputs.extra_patches_dir }}"
+          patch_dir="$GITHUB_WORKSPACE/$EXTRA_PATCHES_DIR"
           if [ ! -d "$patch_dir" ]; then
             echo "Extra patches dir not found: $patch_dir" >&2
             exit 1
@@ -333,9 +353,11 @@ jobs:
 
       - name: Apply performance patches
         if: ${{ !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
+        env:
+          RCU_LAZY: ${{ inputs.rcu_lazy }}
         run: |
           dirs=(lz4)
-          if [ "${{ inputs.rcu_lazy }}" = "true" ]; then dirs+=(rcu-lazy); fi
+          if [ "$RCU_LAZY" = "true" ]; then dirs+=(rcu-lazy); fi
           cd "$KERNEL_DIR"
           for d in "${dirs[@]}"; do
             for patch in "$GITHUB_WORKSPACE/patches/$d"/*.patch; do
@@ -346,12 +368,15 @@ jobs:
 
       - name: Apply SUSFS patches
         if: ${{ inputs.susfs_support == true }}
+        env:
+          SUSFS_BRANCH: ${{ inputs.susfs_branch || 'gki-android13-5.10' }}
+          SUSFS_FORCE: ${{ inputs.susfs_force }}
         run: |
           cd "$KERNEL_DIR"
           cp ../susfs4ksu/kernel_patches/fs/* ./fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./include/linux/
-          susfs_patch="../susfs4ksu/kernel_patches/50_add_susfs_in_${{ inputs.susfs_branch || 'gki-android13-5.10' }}.patch"
-          if [ "${{ inputs.susfs_force }}" = "true" ]; then
+          susfs_patch="../susfs4ksu/kernel_patches/50_add_susfs_in_${SUSFS_BRANCH}.patch"
+          if [ "$SUSFS_FORCE" = "true" ]; then
             patch -p1 --force < "$susfs_patch" || echo "Continuing despite patch failure"
           else
             patch -p1 < "$susfs_patch"
@@ -407,23 +432,22 @@ jobs:
           fi
 
       - name: Build kernel
-        run: |
-          SUSFS_SUPPORT="${{ inputs.susfs_support }}" \
-          KPM_SUPPORT="${{ inputs.kpm_support }}" \
-          BBG_SUPPORT="${{ inputs.bbg_support }}" \
-          DROIDSPACES_SUPPORT="${{ inputs.droidspaces_support }}" \
-          RCU_LAZY_SUPPORT="${{ inputs.rcu_lazy && !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}" \
-          Scripts/build_kernel.sh
+        env:
+          SUSFS_SUPPORT: ${{ inputs.susfs_support }}
+          KPM_SUPPORT: ${{ inputs.kpm_support }}
+          BBG_SUPPORT: ${{ inputs.bbg_support }}
+          DROIDSPACES_SUPPORT: ${{ inputs.droidspaces_support }}
+          RCU_LAZY_SUPPORT: ${{ inputs.rcu_lazy && !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
+        run: Scripts/build_kernel.sh
 
       - name: ccache stats
         if: always()
         run: ccache -s || true
 
       - name: Package AnyKernel3
-        run: |
-          KERNEL_TYPE="${{ inputs.kernel_type || 'LineageOS' }}" \
-          BUILD_DATE="${{ env.BUILD_DATE }}" \
-          Scripts/package_anykernel.sh
+        env:
+          KERNEL_TYPE: ${{ inputs.kernel_type || 'LineageOS' }}
+        run: Scripts/package_anykernel.sh
 
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -8,6 +8,7 @@
 - SukiSU `builtin` at `4bec532d`, up from `1cfa5734`. 12 commits: SELinux generation tracking and `selinux_hide` fixes ported from KernelSU, the `KSU_SUSFS_PRIORITY_UID_FILTER` Kconfig option, the rename to Nova.
 - SUSFS v2.4.0 at `1bea9e8f` (Nov.9 2026), up from `487cbbb5`: rate-limited logging of hidden SELinux types and rules, `O_NOATIME` when the priority uid filter reads its file, and the priority uid filter is now its own Kconfig option (`CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER`, on, checked by the build). Not the branch head: its new `sus_path_uid_filter` needs a newer SukiSU branch.
 - Zip and release names say `SukiSU-Nova`.
+- Builds with `susfs_support` off now stop with an error. With SUSFS off, SukiSU builds in a prebuilt binary (`runner_xxd.h`) that runs at boot as part of init and cannot be checked against source. With SUSFS on, that runner is built from source.
 
 ### Fixed
 - The CI manager check failed because the old SukiSU-Ultra releases are gone. It now reads the SukiSU Nova releases.
@@ -15,6 +16,8 @@
 
 ### Security
 - `KSU_GITHUB_VER=3.0.0` is set in the build. Without it, SukiSU's `kernel/Makefile` took the latest GitHub release tag name and put it, unchecked, into the compiler command line. A crafted tag name could run commands on the CI runner. CI now fails if the value does not match the pinned manager.
+- SukiSU's signature fallback is removed from the build. With no `com.sukisu.nova` manager installed, it made any app signed with one of 7 built-in fork keys the root manager, whatever its package name. CI deletes the `ksu_sig_fallback_init()` call and fails if it is still there.
+- Workflow inputs no longer go straight into shell scripts. `build.yml` passes them through `env:`, so a crafted input value cannot run commands on the CI runner.
 
 ## v3.4.0 - SukiSU-Ultra manager v4.3.0-r1 (Nov.5 2026)
 
