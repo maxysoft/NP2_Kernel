@@ -292,6 +292,10 @@ jobs:
           SUKISU_REV=4bec532dd447e2852aa8932afa768255350c103a
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
+          for patch in "$GITHUB_WORKSPACE"/patches/sukisu/*.patch; do
+            echo "Applying $patch"
+            git -C KernelSU apply "$patch"
+          done
           sed -i '/^[[:space:]]*ksu_sig_fallback_init();[[:space:]]*$/d' KernelSU/kernel/ksu_main.c
           # Keep the if form: under set -e a "! grep -q" line never stops the script, so the check could not fail.
           if grep -q 'ksu_sig_fallback_init()' KernelSU/kernel/ksu_main.c; then

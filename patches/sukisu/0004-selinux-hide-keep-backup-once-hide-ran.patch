@@ -1,0 +1,33 @@
+Subject: selinux_hide: keep backup_sepolicy once hide has run since boot
+Base: SukiSU-Nova builtin @ 4bec532dd447e2852aa8932afa768255350c103a
+
+diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
+index ca0c04ac..4cb59eb6 100644
+--- a/kernel/feature/selinux_hide.c
++++ b/kernel/feature/selinux_hide.c
+@@ -27,6 +27,8 @@
+ static DEFINE_MUTEX(selinux_hide_mutex);
+ bool ksu_selinux_hide_enabled __read_mostly = false;
+ bool ksu_selinux_hide_running __read_mostly = false;
++// SUSFS hooks read ksu_selinux_hide_running without a lock, so a reader may still use backup_sepolicy after hide is switched off.
++static bool ksu_selinux_hide_ever_running;
+ 
+ enum sel_inos {
+     SEL_ROOT_INO = 2,
+@@ -372,6 +374,7 @@ static int selinux_hide_feature_set(u64 value)
+         if (!ksu_selinux_hide_running) {
+             ret = ksu_selinux_hide_enable();
+             if (!ret) {
++                ksu_selinux_hide_ever_running = true;
+                 ksu_selinux_hide_running = true;
+             }
+         }
+@@ -419,7 +422,7 @@ void __exit ksu_selinux_hide_exit()
+ void ksu_selinux_hide_drop_backup_if_unused()
+ {
+     mutex_lock(&selinux_hide_mutex);
+-    if (!ksu_selinux_hide_running && backup_sepolicy) {
++    if (!ksu_selinux_hide_ever_running && backup_sepolicy) {
+         pr_info("selinux_hide is not enabled - drop backup_sepolicy\n");
+         sidtab_destroy(backup_sepolicy->sidtab);
+         kfree(backup_sepolicy->sidtab);

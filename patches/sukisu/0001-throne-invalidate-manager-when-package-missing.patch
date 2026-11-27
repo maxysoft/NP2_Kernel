@@ -1,0 +1,30 @@
+Subject: throne_tracker: invalidate the manager uid whenever com.sukisu.nova is missing
+Base: SukiSU-Nova builtin @ 4bec532dd447e2852aa8932afa768255350c103a
+
+diff --git a/kernel/manager/throne_tracker.c b/kernel/manager/throne_tracker.c
+index ff54224f..2ac88151 100644
+--- a/kernel/manager/throne_tracker.c
++++ b/kernel/manager/throne_tracker.c
+@@ -290,22 +290,6 @@ void track_throne(bool prune_only)
+     if (manager_package_uid == KSU_INVALID_APPID) {
+         cached_manager_apk_path[0] = 0;
+         if (ksu_is_manager_appid_valid()) {
+-            struct uid_data *cur;
+-            bool still_installed = false;
+-
+-            list_for_each_entry (cur, &uid_list, list) {
+-                if (cur->uid == ksu_get_manager_appid()) {
+-                    still_installed = true;
+-                    break;
+-                }
+-            }
+-
+-            if (still_installed) {
+-                pr_info("manager uid=%u still installed (signature fallback), skip search!\n",
+-                        ksu_get_manager_appid());
+-                goto prune;
+-            }
+-
+             pr_info("manager is uninstalled, invalidate it!\n");
+             ksu_invalidate_manager_uid();
+         }
