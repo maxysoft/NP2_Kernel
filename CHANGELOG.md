@@ -1,6 +1,17 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
+## v3.6.2 - Linux 5.10.275 and an erofs fix (Nov.28 2026)
+
+### Changed
+- Kernel updated from 5.10.270 to 5.10.275, taken from Google's `android12-5.10-lts` branch, which already contains the `android12-5.10.272_r00` release. Google has no GKI release tag for 5.10.275 yet. The kernel ABI (KMI) is unchanged, so the ROM's vendor modules load as before. 273 CVEs are fixed in built-in code; see `docs/cve-5.10.275.md`.
+- AnyKernel3 updated to `41f04bdb`. Its `magiskboot` and `magiskpolicy` are the ones from the stable Magisk v31.1 release.
+- `softprops/action-gh-release` updated to v3.0.4.
+- LZ4 stays at 1.10. Version 1.11.1 was ported and tested, but it showed no gain and needs an upstream fix that is not released yet.
+
+### Fixed
+- erofs partitions (`/vendor`, `/odm`, `/vendor_dlkm`) could, in rare cases, read corrupted data when LZ4 decompressed in place. The safety margin was one byte too small for the LZ4 1.10 decoder, shipped since release #21. The margin is now correct, and the build fails if it goes missing.
+
 ## v3.6.1 - SukiSU kernel fixes (Nov.27 2026)
 
 ### Fixed
