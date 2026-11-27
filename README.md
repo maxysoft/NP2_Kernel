@@ -22,7 +22,7 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 - **KPM Support**: KPM modules via [KernelPatch by SukiSU Nova](https://github.com/SukiSU-Nova/SukiSU_KernelPatch_patch). Not working in v3.3.0, see the warning above
 - **LZ4 1.10**: newer LZ4 library for zram and erofs, from [arter97's Nothing Phone 2 kernel](https://github.com/arter97/android_kernel_nothing_sm8475). See `SPEC.md` §R
 - **Lazy RCU** (on by default, `rcu_lazy` workflow input): the kernel batches deferred frees so idle CPUs wake less often. See `SPEC.md` §R
-- **Linux 5.10.270** (LineageOS build only): upstream LTS fixes from Google's `android12-5.10.270_r00` GKI release, merged onto LineageOS's 5.10.246 kernel. See `SPEC.md` §L
+- **Linux 5.10.275** (LineageOS build only): upstream LTS fixes from Google's `android12-5.10-lts` GKI branch, merged onto LineageOS's 5.10.246 kernel. See `SPEC.md` §L
 - **Crash-log archiver**: keeps the kernel and Android logs of the last 20 boots in `/data/adb/pstore`, so you can read why the phone crashed or rebooted after the next good boot. See [Crash logs](#crash-logs)
 
 ## Install
