@@ -237,11 +237,10 @@ jobs:
             "$KERNEL_REPO" \
             "$KERNEL_DIR"
 
-          # Pinned: AnyKernel3 @ af770f7b16cf (2026-08-22) — last commit before the
-          # magiskboot v31.0 *beta* tools bump. Upstream ships no tags, so a SHA is the
-          # only pin available; full clone because a shallow one cannot check out non-tip.
+          # Pinned: AnyKernel3 @ 41f04bdb4ee3 (2026-10-27), tools from stable Magisk v31.1. Upstream ships no tags,
+          # so a SHA is the only pin available; full clone because a shallow one cannot check out non-tip.
           git clone https://github.com/osm0sis/AnyKernel3.git "$ANYKERNEL_DIR"
-          git -C "$ANYKERNEL_DIR" checkout af770f7b16cf8f8eb7c68614b2a693b3b361c90c
+          git -C "$ANYKERNEL_DIR" checkout 41f04bdb4ee30a44e429c2c1131d5e8bb32b15f1
           rm -rf "$ANYKERNEL_DIR/.git"
 
       - name: Clone SUSFS
@@ -387,6 +386,7 @@ jobs:
               patch -p1 < "$patch"
             done
           done
+          grep -q '^#define LZ4_DECOMPRESS_INPLACE_MARGIN' include/linux/lz4.h || { echo "::error::include/linux/lz4.h does not define LZ4_DECOMPRESS_INPLACE_MARGIN: erofs would fall back to an in-place margin too small for the decoder (SPEC §R2)."; exit 1; }
 
       - name: Apply SUSFS patches
         if: ${{ inputs.susfs_support == true }}
@@ -534,7 +534,7 @@ jobs:
           name: ${{ needs.manager.outputs.artifact }}
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: "${{ inputs.kernel_type || 'LineageOS' }}-${{ github.run_number }}"
           name: "NP2 Kernel – ${{ inputs.kernel_type || 'LineageOS' }} #${{ github.run_number }}"
