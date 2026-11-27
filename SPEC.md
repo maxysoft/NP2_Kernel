@@ -81,7 +81,7 @@ After signing, `apksigner verify` must report v2 `true`, v3 and v3.1 `false`, on
 | `droidspaces_support` | `false` | Applies `patches/droidspaces` kABI fixes + container configs |
 | `kernel_type` | `LineageOS` | Used in zip name and release tag |
 | `rcu_lazy` | `true` | Applies `patches/rcu-lazy`, sets `CONFIG_RCU_LAZY=y`, appends `rcu_nocbs=0-7` to `CONFIG_CMDLINE` (§R3) |
-| `extra_patches_dir` | `patches/lineage-lts` | Repo-local dir of `.patch`/`.diff` files. The default holds the LineageOS-only LTS backport (§L); clear it when overriding `kernel_repo`/`kernel_branch` |
+| `extra_patches_dir` | `patches/lineage-lts` | Repo-local dir of `.patch`/`.diff` files. Must resolve (symlinks followed) inside the checkout. The default holds the LineageOS-only LTS backport (§L); clear it when overriding `kernel_repo`/`kernel_branch` |
 
 ### I.zip-name — output artifact
 
