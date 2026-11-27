@@ -376,6 +376,7 @@ jobs:
               patch -p1 < "$patch"
             done
           done
+          grep -q '^#define LZ4_DECOMPRESS_INPLACE_MARGIN' include/linux/lz4.h || { echo "::error::include/linux/lz4.h does not define LZ4_DECOMPRESS_INPLACE_MARGIN: erofs would fall back to an in-place margin too small for the decoder (SPEC §R2)."; exit 1; }
 
       - name: Apply SUSFS patches
         if: ${{ inputs.susfs_support == true }}
