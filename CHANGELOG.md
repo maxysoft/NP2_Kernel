@@ -1,6 +1,17 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
+## v3.6.1 - SukiSU kernel fixes (Nov.27 2026)
+
+### Fixed
+- The manager's "su compat" switch now works. With SUSFS, the kernel checked a flag the switch never changed. The same mix-up let the kernel write 8 bytes past that flag's end at boot. Turning it off hides `/system/bin/su` only; the KernelSU boot hooks keep running.
+- Restricted app profiles get `CAP_DAC_READ_SEARCH` before running `ksud`, as intended. Before, a typo gave them `CAP_DAC_OVERRIDE` instead.
+- Switching SELinux hide off during boot could free its policy copy while the kernel was still reading it. The copy is now kept once hide has run.
+
+### Security
+- When the manager package is uninstalled, the kernel always drops its manager rights. Before, an app that got the same uid in the same package update would keep them.
+- `extra_patches_dir` must point inside the repository checkout.
+
 ## v3.6.0 - Own SukiSU Nova manager build (Nov.27 2026)
 
 ### Changed
