@@ -103,6 +103,7 @@ jobs:
     outputs:
       artifact: ${{ steps.apk.outputs.artifact }}
     env:
+      CERT_SIZE: '0x2fb'
       CERT_SHA256: 6eb6e32ec40d8e6a9cf09bd85afaca8b58be4c7040c597da13ebc896a1cc907f
     steps:
       - name: Download unsigned APK
@@ -124,10 +125,10 @@ jobs:
         env:
           MANAGER_KEYSTORE: ${{ secrets.MANAGER_KEYSTORE }}
           MANAGER_KEYSTORE_PASSWORD: ${{ secrets.MANAGER_KEYSTORE_PASSWORD }}
-          MANAGER_KEY_ALIAS: ${{ secrets.MANAGER_KEY_ALIAS }}
+          KEY_ALIAS: mxy
           MANAGER_KEY_PASSWORD: ${{ secrets.MANAGER_KEY_PASSWORD }}
         run: |
-          for s in MANAGER_KEYSTORE MANAGER_KEYSTORE_PASSWORD MANAGER_KEY_ALIAS MANAGER_KEY_PASSWORD; do
+          for s in MANAGER_KEYSTORE MANAGER_KEYSTORE_PASSWORD MANAGER_KEY_PASSWORD; do
             if [ -z "${!s}" ]; then
               echo "::error::Repository secret $s is not set. The manager APK must be signed with the project key (SPEC V15)."
               exit 1
@@ -139,7 +140,7 @@ jobs:
           (umask 077 && base64 -d <<<"$MANAGER_KEYSTORE" > "$ks")
           "$bt/zipalign" -P 16 -f 4 unsigned.apk aligned.apk
           "$bt/apksigner" sign --ks "$ks" --ks-type PKCS12 --ks-pass env:MANAGER_KEYSTORE_PASSWORD \
-            --ks-key-alias "$MANAGER_KEY_ALIAS" --key-pass env:MANAGER_KEY_PASSWORD \
+            --ks-key-alias "$KEY_ALIAS" --key-pass env:MANAGER_KEY_PASSWORD \
             --v1-signing-enabled false --v2-signing-enabled true --v3-signing-enabled false --v4-signing-enabled false \
             --out "$APK_NAME.apk" aligned.apk
 
@@ -148,26 +149,36 @@ jobs:
         run: |
           sig=$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK_NAME.apk")
           badging=$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt2" dump badging "$APK_NAME.apk")
-          for want in 'Verified using v2 scheme (APK Signature Scheme v2): true' 'Verified using v3 scheme (APK Signature Scheme v3): false' 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false' 'Number of signers: 1' "Signer #1 certificate SHA-256 digest: $CERT_SHA256"; do
+          for want in 'Verified using v2 scheme (APK Signature Scheme v2): true' 'Verified using v3 scheme (APK Signature Scheme v3): false' 'Verified using v3.1 scheme (APK Signature Scheme v3.1): false' 'Number of signers: 1'; do
             if ! grep -qxF -- "$want" <<<"$sig"; then
               echo "::error::apksigner did not report '$want'. The kernel only accepts a v2-only signature by the project key (SPEC V13, V15)."
+              grep -E '^(Verifies|Verified|Number of signers|Signer #1 certificate)' <<<"$sig" || echo "$sig"
               exit 1
             fi
           done
           python3 -I - "$APK_NAME.apk" <<'EOF'
-          import struct, sys
+          import hashlib, os, struct, sys
           d = open(sys.argv[1], 'rb').read()
           cd = struct.unpack_from('<I', d, d.rfind(b'PK\x05\x06') + 16)[0]
           size, magic = struct.unpack_from('<Q16s', d, cd - 24)
           if magic != b'APK Sig Block 42':
               sys.exit('::error::No APK signing block found.')
-          pos, ids = cd - size, []
+          pos, ids, cert = cd - size, [], b''
+          lp = lambda p: (p + 4, p + 4 + struct.unpack_from('<I', d, p)[0])
           while pos < cd - 24:
               n, i = struct.unpack_from('<QI', d, pos)
               ids.append(i)
+              if i == 0x7109871a:
+                  signer = lp(lp(pos + 12)[0])[0]
+                  certs = lp(lp(lp(signer)[0])[1])[0]
+                  a, b = lp(certs)
+                  cert = d[a:b]
               pos += 8 + n
           if ids.count(0x7109871a) != 1 or set(ids) - {0x7109871a, 0x42726577}:
               sys.exit('::error::Signing block pairs %s: the kernel accepts only one v2 block plus verity padding (SPEC V13).' % [hex(i) for i in ids])
+          got = (hex(len(cert)), hashlib.sha256(cert).hexdigest())
+          if got != (os.environ['CERT_SIZE'], os.environ['CERT_SHA256']):
+              sys.exit('::error::First v2 signer certificate is %s %s, the kernel trusts only %s %s (SPEC V13).' % (got + (os.environ['CERT_SIZE'], os.environ['CERT_SHA256'])))
           EOF
           if ! grep -qxF "native-code: 'arm64-v8a'" <<<"$badging" || ! grep -q "^package: name='com.sukisu.nova' versionCode='35000' versionName='v3.0.0-mxy' " <<<"$badging"; then
             echo "::error::APK identity is not com.sukisu.nova 35000 v3.0.0-mxy arm64-v8a only (SPEC V15)."
