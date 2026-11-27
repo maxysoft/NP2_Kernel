@@ -21,16 +21,22 @@ LTO cannot fold its frame into the reachable HC path. LZ4HC_MIN_CLEVEL
 and LZ4HC_MAX_CLEVEL keep their old values (3, 16): f2fs checks its
 mount option against them.
 
+include/linux/lz4.h also sets LZ4_DECOMPRESS_INPLACE_MARGIN to
+(srcsize >> 8) + 33. erofs falls back to + 32 when it is undefined (and
+lib/lz4/lz4.h defines it only under LZ4_STATIC_LINKING_ONLY), which is
+one byte short for the decoder's 32-byte wild copies (upstream lz4
+3d5c81017890): an in-place decode could overwrite input it has not read.
+
 Callers (crypto/lz4*.c, erofs, f2fs, incfs, decompress_unlz4) are
 unchanged. Only LZ4_compress_default, LZ4_compress_fast, LZ4_compress_HC,
 LZ4_loadDict and LZ4_saveDict stay exported; no in-tree module and no
 KMI symbol list imports the dropped LZ4 exports.
 ---
 diff --git a/include/linux/lz4.h b/include/linux/lz4.h
-index b16e15b9587a..90ee45573a34 100644
+index b16e15b9587a..75516bd90a10 100644
 --- a/include/linux/lz4.h
 +++ b/include/linux/lz4.h
-@@ -1,648 +1,18 @@
+@@ -1,648 +1,22 @@
 -/* LZ4 Kernel Interface
 - *
 - * Copyright (C) 2013, LG Electronics, Kyungsik Lee <kyungsik.lee@lge.com>
@@ -103,7 +109,11 @@ index b16e15b9587a..90ee45573a34 100644
 -	(unsigned int)(isize) > (unsigned int)LZ4_MAX_INPUT_SIZE \
 -	? 0 \
 -	: (isize) + ((isize)/255) + 16)
--
++/* f2fs validates lz4:<level> mount options against these: keep the pre-1.10 range. */
++#define LZ4HC_MIN_CLEVEL	3
++#define LZ4HC_DEFAULT_CLEVEL	LZ4HC_CLEVEL_DEFAULT
++#define LZ4HC_MAX_CLEVEL	16
+ 
 -#define LZ4_ACCELERATION_DEFAULT 1
 -#define LZ4_HASHLOG	 (LZ4_MEMORY_USAGE-2)
 -#define LZ4_HASHTABLESIZE (1 << LZ4_MEMORY_USAGE)
@@ -685,10 +695,9 @@ index b16e15b9587a..90ee45573a34 100644
 - */
 -int LZ4_decompress_fast_usingDict(const char *source, char *dest,
 -	int originalSize, const char *dictStart, int dictSize);
-+/* f2fs validates lz4:<level> mount options against these: keep the pre-1.10 range. */
-+#define LZ4HC_MIN_CLEVEL	3
-+#define LZ4HC_DEFAULT_CLEVEL	LZ4HC_CLEVEL_DEFAULT
-+#define LZ4HC_MAX_CLEVEL	16
++/* erofs decodes in place when the gap meets this. The 32-byte wild copies need + 33; lz4.h's + 32 is one byte short. */
++#undef LZ4_DECOMPRESS_INPLACE_MARGIN
++#define LZ4_DECOMPRESS_INPLACE_MARGIN(srcsize)	(((srcsize) >> 8) + 33)
  
  #endif
 diff --git a/lib/lz4/Makefile b/lib/lz4/Makefile
