@@ -4,6 +4,11 @@ permissions:
   contents: read
 
 on:
+  push:
+    paths:
+      - .github/workflows/build-manager.yml
+      - Scripts/patch-manager.sh
+      - patches/manager/**
   workflow_dispatch:
   workflow_call:
     outputs:
