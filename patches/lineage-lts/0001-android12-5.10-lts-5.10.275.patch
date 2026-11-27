@@ -2,7 +2,7 @@ Merge ACK branch android12-5.10-lts (5.10.275) into LineageOS lineage-23.2
 
 Base:  LineageOS/android_kernel_nothing_sm8475 lineage-23.2 @ 4ec5491f6b5fd8776207a2a453d6b98b1928de7a (5.10.246)
 Merge: kernel/common branch android12-5.10-lts @ 3c6d522107842af344ed0e36a82774a709129955 (5.10.275, KMI_GENERATION=9, contains android12-5.10.272_r00)
-Diff:  git diff 4ec5491f6b5fd8776207a2a453d6b98b1928de7a f111ab9a42a6c5d80191fe151468d26746a58795
+Diff:  git diff 4ec5491f6b5fd8776207a2a453d6b98b1928de7a 814cccd2ae3a1e38b4bf9257e21a4a5105306ac3
 
 diff --git a/.gitignore b/.gitignore
 index 72378676d..e35141134 100644
@@ -215317,19 +215317,6 @@ index a5942d9a6..15be4beb5 100644
  	pm_runtime_mark_last_busy(ctrl->dev);
  	pm_runtime_put_autosuspend(ctrl->dev);
  	return ret;
-diff --git a/drivers/slimbus/messaging.c b/drivers/slimbus/messaging.c
-index d67e25690..8ff1f0fd8 100644
---- a/drivers/slimbus/messaging.c
-+++ b/drivers/slimbus/messaging.c
-@@ -132,7 +132,7 @@ int slim_do_transfer(struct slim_controller *ctrl, struct slim_msg_txn *txn)
- 	if (need_tid) {
- 		ret = slim_alloc_txn_tid(ctrl, txn);
- 		if (ret)
--			return ret;
-+			goto slim_xfer_err;
- 
- 		if (!txn->msg->comp) {
- 			comp = txn->comp;
 diff --git a/drivers/slimbus/qcom-ngd-ctrl.c b/drivers/slimbus/qcom-ngd-ctrl.c
 index 9a95080f7..bd8d26967 100644
 --- a/drivers/slimbus/qcom-ngd-ctrl.c

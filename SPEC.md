@@ -196,13 +196,14 @@ Conflict resolutions for `.270_r00`, merged on top of the `.269_r00` merge (2 fi
 - `drivers/dma/qcom/bam_dma.c`: both sides (Lineage's IPC log teardown, then `pm_runtime_dont_use_autosuspend()`).
 - `drivers/rpmsg/qcom_glink_native.c`: upstream's `qcom_glink_remove_rpmsg_device()` in both close paths instead of Lineage's inline copies, and the unused `chinfo` local in `qcom_glink_rx_close_ack()` dropped. CLO's `qcom_glink_destroy_ept()` already does not unregister the rpdev, which is where upstream's deadlock fix ends up.
 
-Conflict resolutions for the `android12-5.10-lts` head `3c6d52210784` (5.10.275), merged on top of the `.270_r00` merge (7 paths). The delta is 3066 commits in 2319 files. It touches 38 files Lineage diverges in; the 32 others auto-merged.
+Conflict resolutions for the `android12-5.10-lts` head `3c6d52210784` (5.10.275), merged on top of the `.270_r00` merge (7 paths). The delta is 3066 commits in 2319 files. It touches 38 files Lineage diverges in; the 32 others auto-merged, one of them corrected after review (slimbus, below).
 
 - `Documentation/devicetree/bindings`: kept Lineage's symlink, dropped upstream's changes to `vendor-prefixes.yaml` and `media/allwinner,sun4i-a10-video-engine.yaml`.
 - `drivers/clk/qcom/clk-rcg2.c` (`=m`): Lineage. CLO has its own `clk_rcg2_set_force_enable()` and `clk_rcg2_clear_force_enable()`, so upstream's copies are dropped; the fix is ported into CLO's poll loop (a `clk_rcg2_is_enabled()` error is returned instead of read as "enabled"). The second half of the fix, clearing the force enable when `clk_rcg2_configure()` fails, auto-merged.
 - `net/qrtr/af_qrtr.c` (`=m`): Lineage, unchanged. CLO's `qrtr_send_resume_tx()` already releases the node when the control packet allocation fails.
 - `include/linux/shmem_fs.h` (`Image`): upstream's out-of-line `shmem_file()` declaration and stub, with Lineage's `shmem_mapping()` declaration (no `extern`).
 - `scripts/sign-file.c` (host tool, not built: `CONFIG_MODULE_SIG` is off): upstream's version. Its `USE_PKCS11_ENGINE` guard covers the `OPENSSL_NO_ENGINE` guards Lineage had added.
+- `drivers/slimbus/messaging.c` (`=m`, auto-merged): Lineage's `return ret;` kept after `slim_alloc_txn_tid()` fails. Upstream's fix changed it to `goto slim_xfer_err` because upstream takes the runtime-PM reference first; CLO allocates the tid before `pm_runtime_get_sync()`, so the error label's `pm_runtime_put_autosuspend()` would drop a reference never taken.
 
 **L5** — Verified 2026-10-13, vanilla trees (no KernelSU/SUSFS/BBG), clang 18.1.3, `LTO_NONE` and no CFI because the full-LTO link needs more than 12 GB RAM (CI keeps full LTO):
 
