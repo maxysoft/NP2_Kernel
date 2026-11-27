@@ -139,6 +139,7 @@ jobs:
     outputs:
       build_date: ${{ steps.date.outputs.build_date }}
       manager: ${{ steps.manager.outputs.manager }}
+      manager_tag: ${{ steps.manager.outputs.tag }}
     env:
       KERNEL_DIR: kernel
       ANYKERNEL_DIR: AnyKernel3
@@ -150,11 +151,12 @@ jobs:
       CCACHE_SLOPPINESS: time_macros,include_file_mtime
       CCACHE_PATH: /usr/bin
       # KSU_VERSION is pinned here on purpose. SukiSU's kernel/Makefile derives it at
-      # build time from a live `api.github.com/.../commits?sha=main` count, so the SHA
-      # pin does NOT control it: builds reported 40922 (main's count) while the manager
-      # app reports 40900, producing "manager version and kernelsu driver version
-      # mismatch!" on device. This value must equal the version code of MGR_TAG in
-      # the "Check manager alignment" step.
+      # build time from a live GitHub API count, so the SHA pin does NOT control it:
+      # builds reported a different number than the manager app, producing "manager
+      # version and kernelsu driver version mismatch!" on device. This value must
+      # equal the version code of MGR_TAG (SukiSU Nova manager) in the "Check manager
+      # alignment" step.
+      # KSU_GITHUB_VER must stay: without it kernel/Makefile puts the GitHub release tag name, unchecked, into the compiler command line.
       MAKE_ARGS: >-
         ARCH=arm64
         CROSS_COMPILE=aarch64-linux-gnu-
@@ -163,7 +165,8 @@ jobs:
         LD=ld.lld HOSTLD=ld.lld
         CC=clang CXX=clang++
         HOSTCC=clang HOSTCXX=clang++
-        KSU_VERSION=41140
+        KSU_VERSION=35000
+        KSU_GITHUB_VER=3.0.0
         O=out
 
     steps:
@@ -240,9 +243,9 @@ jobs:
       - name: Clone SUSFS
         if: ${{ inputs.susfs_support == true }}
         run: |
-          # Pinned: SUSFS v2.3.0 @ 487cbbb5b4c9 (2026-11-02). The branch carries no
+          # Pinned: SUSFS v2.4.0 @ 1bea9e8fb4a6 (2026-11-09). The branch carries no
           # current tag (only 1.4.2-gki-android13-5.10 from 2024), so the SHA is the pin.
-          # Not its head: 3bd16375+ needs CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER, which builtin lacks (SPEC V9).
+          # Not its head: d480b312+ adds sus_path_uid_filter, which builtin does not dispatch (only Nova's builtin-new does).
           # Full clone, not --depth=1: a shallow clone cannot check out a non-tip commit.
           #
           # Paired with the SukiSU `builtin` pin below, both ways: the kernel-side patch
@@ -254,15 +257,15 @@ jobs:
           branch="${{ inputs.susfs_branch || 'gki-android13-5.10' }}"
           git clone -b "$branch" https://gitlab.com/simonpunk/susfs4ksu.git
           if [ "$branch" = "gki-android13-5.10" ]; then
-            git -C susfs4ksu checkout 487cbbb5b4c93b01c0e2427e48414ca9efd4677b
+            git -C susfs4ksu checkout 1bea9e8fb4a64920f068e5da43f9751dfe601199
           else
             echo "Non-default SUSFS branch '$branch' — no pin available, tracking tip"
           fi
 
-      - name: Setup SukiSU-Ultra
+      - name: Setup SukiSU-Nova
         run: |
           cd "$KERNEL_DIR"
-          # Pinned: SukiSU-Ultra `builtin` branch @ 1cfa57340590 (2026-11-01).
+          # Pinned: SukiSU-Nova `builtin` branch @ 4bec532dd447.
           # Its KPM bridge speaks ABI 2, like the kpimg in build_kernel.sh. Bump this pin
           # and kpimg together, or KPM loading fails with EOPNOTSUPP.
           # Deliberately NOT a release tag. Release tags, main and dev declare no KSU_SUSFS
@@ -272,20 +275,20 @@ jobs:
           # fs/susfs.c + include/linux/susfs.h from the susfs4ksu patch below.
           # setup.sh is fetched at the same commit; it swallows a failed checkout
           # ("git checkout ... || echo"), so the ref is verified afterwards.
-          SUKISU_REV=1cfa57340590971cba7521ed536da8ebbedc5f0a
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
+          SUKISU_REV=4bec532dd447e2852aa8932afa768255350c103a
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/${SUKISU_REV}/kernel/setup.sh" | bash -s "$SUKISU_REV"
           test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_REV"
 
       - name: Check manager alignment
         id: manager
         env:
           GH_TOKEN: ${{ github.token }}
-          MGR_TAG: v4.3.0-r1
+          MGR_TAG: v3.0.0
         run: |
-          rel=$(gh api "repos/SukiSU-Ultra/SukiSU-Ultra/releases/tags/$MGR_TAG")
+          rel=$(gh api "repos/SukiSU-Nova/SukiSU-Nova/releases/tags/$MGR_TAG")
           tag=$(jq -r .tag_name <<<"$rel")
-          mgr_code=$(jq -r '.assets[].name' <<<"$rel" | sed -nE 's/^SukiSU_v[^_]+_([0-9]+)-release\.apk$/\1/p')
-          mgr_hdr=$(gh api -H 'Accept: application/vnd.github.raw' "repos/SukiSU-Ultra/SukiSU-Ultra/contents/uapi/supercall.h?ref=$tag")
+          mgr_code=$(jq -r '.assets[].name' <<<"$rel" | sed -nE 's/^SukiSU_Nova_v[^_]+_([0-9]+)-arm64-v8a-release\.apk$/\1/p')
+          mgr_hdr=$(gh api -H 'Accept: application/vnd.github.raw' "repos/SukiSU-Nova/SukiSU-Nova/contents/uapi/supercall.h?ref=$tag")
           mgr_uapi=$(sed -nE 's/.*KERNEL_SU_UAPI_VERSION[^0-9]+([0-9]+).*/\1/p' <<<"$mgr_hdr")
           drv_code=$(sed -nE 's/.*KSU_VERSION=([0-9]+).*/\1/p' <<<"$MAKE_ARGS")
           drv_uapi=$(sed -nE 's/.*KERNEL_SU_UAPI_VERSION[^0-9]+([0-9]+).*/\1/p' "$KERNEL_DIR/KernelSU/kernel/include/uapi/supercall.h")
@@ -295,11 +298,19 @@ jobs:
             echo "::error::Driver does not match pinned manager $tag. Set KSU_VERSION in MAKE_ARGS to its version code and pin a SukiSU builtin revision with the same uapi version (SPEC V6)."
             exit 1
           fi
-          latest=$(gh api repos/SukiSU-Ultra/SukiSU-Ultra/releases/latest --jq .tag_name)
+          case " $MAKE_ARGS " in
+            *" KSU_GITHUB_VER=${tag#v} "*) ;;
+            *)
+              echo "::error::MAKE_ARGS must contain KSU_GITHUB_VER=${tag#v}: without it kernel/Makefile puts the GitHub release tag name unchecked into the compiler command line."
+              exit 1
+              ;;
+          esac
+          latest=$(gh api repos/SukiSU-Nova/SukiSU-Nova/releases/latest --jq .tag_name)
           if [ "$latest" != "$tag" ]; then
-            echo "::warning::SukiSU-Ultra $latest is out; this build still targets manager $tag. Bump MGR_TAG, KSU_VERSION, the builtin pin and, if its KPM bridge ABI changed, kpimg together once builtin's uapi version matches $latest (SPEC V6)."
+            echo "::warning::SukiSU Nova $latest is out; this build still targets manager $tag. Bump MGR_TAG, KSU_VERSION, KSU_GITHUB_VER, the builtin pin and, if its KPM bridge ABI changed, kpimg together once builtin's uapi version matches $latest (SPEC V6)."
           fi
           echo "manager=$tag ($mgr_code)" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Apply extra patches
         if: ${{ inputs.extra_patches_dir != '' }}
@@ -417,15 +428,15 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}
-          path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ env.BUILD_DATE }}.zip"
+          name: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Nova-${{ env.BUILD_DATE }}
+          path: "kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Nova-${{ env.BUILD_DATE }}.zip"
           retention-days: 30
 
       - name: Upload .config for debugging
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: config-NP2-SukiSU-Ultra
+          name: config-NP2-SukiSU-Nova
           path: kernel/out/.config
           retention-days: 1
 
@@ -448,7 +459,7 @@ jobs:
         if: always() && steps.collect_rej.outputs.found == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: rej-NP2-SukiSU-Ultra
+          name: rej-NP2-SukiSU-Nova
           path: rej/
 
   release:
@@ -459,7 +470,7 @@ jobs:
     permissions:
       contents: write
     env:
-      ZIP: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Ultra-${{ needs.build.outputs.build_date }}
+      ZIP: kernel-${{ inputs.kernel_type || 'LineageOS' }}-NP2-SukiSU-Nova-${{ needs.build.outputs.build_date }}
     steps:
       - name: Download kernel zip
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -475,7 +486,7 @@ jobs:
             **Kernel type:** ${{ inputs.kernel_type || 'LineageOS' }}
             **Branch:** ${{ inputs.kernel_branch || 'lineage-23.2' }}
             **KPM:** ${{ inputs.kpm_support }}  **SUSFS:** ${{ inputs.susfs_support }}  **BBG:** ${{ inputs.bbg_support }}  **Droidspaces:** ${{ inputs.droidspaces_support }}  **Lazy RCU:** ${{ inputs.rcu_lazy && !contains(inputs.kernel_repo || '', 'arter97/android_kernel_nothing_sm8475') }}
-            **Manager:** SukiSU-Ultra ${{ needs.build.outputs.manager }} — install exactly this manager version. A newer manager may not work with this kernel.
+            **Manager:** [SukiSU Nova ${{ needs.build.outputs.manager }}](https://github.com/SukiSU-Nova/SukiSU-Nova/releases/tag/${{ needs.build.outputs.manager_tag }}) — install exactly this manager version. A newer manager may not work with this kernel.
           files: "${{ env.ZIP }}.zip"
           draft: false
           prerelease: false

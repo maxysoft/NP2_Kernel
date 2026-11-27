@@ -15,5 +15,5 @@ cp Scripts/pstore-archive.sh "${ANYKERNEL_DIR}/"
 cd "${ANYKERNEL_DIR}"
 KERNEL_TYPE="${KERNEL_TYPE:-LineageOS}"
 # Append colon-free ISO build date when provided (CI); local builds stay dateless
-ZIP_NAME="kernel-${KERNEL_TYPE}-NP2-SukiSU-Ultra${BUILD_DATE:+-${BUILD_DATE}}.zip"
+ZIP_NAME="kernel-${KERNEL_TYPE}-NP2-SukiSU-Nova${BUILD_DATE:+-${BUILD_DATE}}.zip"
 zip -r9 "../${ZIP_NAME}" ./*

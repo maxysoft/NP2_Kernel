@@ -147,7 +147,7 @@ make ${MAKE_ARGS} olddefconfig
 # how CONFIG_KSU_SUSFS was dropped for months while the build stayed green and the
 # release notes still said "SUSFS: true". Fail the build instead.
 required=("CONFIG_KSU")
-if [ "${SUSFS_SUPPORT}" = "true" ]; then required+=("CONFIG_KSU_SUSFS"); fi
+if [ "${SUSFS_SUPPORT}" = "true" ]; then required+=("CONFIG_KSU_SUSFS" "CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER"); fi
 if [ "${KPM_SUPPORT}" = "true" ]; then required+=("CONFIG_KPM"); fi
 if [ "${BBG_SUPPORT}" = "true" ]; then required+=("CONFIG_BBG"); fi
 if [ "${RCU_LAZY_SUPPORT:-false}" = "true" ]; then required+=("CONFIG_RCU_LAZY"); fi
@@ -173,7 +173,7 @@ make -j"${JOBS}" ${MAKE_ARGS} Image KCFLAGS="-Wno-error"
 if [ "${KPM_SUPPORT}" = "true" ]; then
   cd out/arch/arm64/boot/
   # The 0.14.0 tag is mutable; the checksums are the real pin.
-  kp=https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.14.0
+  kp=https://github.com/SukiSU-Nova/SukiSU_KernelPatch_patch/releases/download/0.14.0
   curl -fsSLo kptools-linux "${kp}/kptools-linux"
   curl -fsSLo kpimg "${kp}/kpimg"
   sha256sum -c - <<'EOF'

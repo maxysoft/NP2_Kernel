@@ -1,6 +1,21 @@
 # Changelog
 > Updates not listed here are because there wasn't changes on the workflow, only updated upstream.
 
+## v3.5.0 - SukiSU Nova manager v3.0.0 (Nov.27 2026)
+
+### Changed
+- **SukiSU Nova manager v3.0.0.** SukiSU-Ultra was renamed to SukiSU Nova. Install `SukiSU_Nova_v3.0.0_35000-arm64-v8a-release.apk` from the [v3.0.0 release](https://github.com/SukiSU-Nova/SukiSU-Nova/releases/tag/v3.0.0). It is a separate app (`com.sukisu.nova`). The old SukiSU Ultra manager does not work with this kernel: uninstall it.
+- SukiSU `builtin` at `4bec532d`, up from `1cfa5734`. 12 commits: SELinux generation tracking and `selinux_hide` fixes ported from KernelSU, the `KSU_SUSFS_PRIORITY_UID_FILTER` Kconfig option, the rename to Nova.
+- SUSFS v2.4.0 at `1bea9e8f` (Nov.9 2026), up from `487cbbb5`: rate-limited logging of hidden SELinux types and rules, `O_NOATIME` when the priority uid filter reads its file, and the priority uid filter is now its own Kconfig option (`CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER`, on, checked by the build). Not the branch head: its new `sus_path_uid_filter` needs a newer SukiSU branch.
+- Zip and release names say `SukiSU-Nova`.
+
+### Fixed
+- The CI manager check failed because the old SukiSU-Ultra releases are gone. It now reads the SukiSU Nova releases.
+- URLs moved off the `SukiSU-Ultra` GitHub org. Its name was re-registered by an unknown party. This covers the `setup.sh` fetch and the `kpimg`/`kptools` download. The sha256 pins are unchanged.
+
+### Security
+- `KSU_GITHUB_VER=3.0.0` is set in the build. Without it, SukiSU's `kernel/Makefile` took the latest GitHub release tag name and put it, unchecked, into the compiler command line. A crafted tag name could run commands on the CI runner. CI now fails if the value does not match the pinned manager.
+
 ## v3.4.0 - SukiSU-Ultra manager v4.3.0-r1 (Nov.5 2026)
 
 ### Fixed

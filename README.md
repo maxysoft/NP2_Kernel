@@ -1,11 +1,11 @@
 # NP² Kernel
 
-![NP²_Kernel](https://socialify.git.ci/maxysoft/NP2_Kernel/image?custom_description=Simple+workflow+to+build+ANY+kernel+with+SukiSU-Ultra+%2B+SuSFS&description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Circuit+Board&pulls=1&stargazers=1&theme=Auto)
+![NP²_Kernel](https://socialify.git.ci/maxysoft/NP2_Kernel/image?custom_description=Simple+workflow+to+build+ANY+kernel+with+SukiSU-Nova+%2B+SuSFS&description=1&font=Inter&forks=1&issues=1&language=1&name=1&owner=1&pattern=Circuit+Board&pulls=1&stargazers=1&theme=Auto)
 
-Fork of [MiguVT/NP2_Kernel](https://github.com/MiguVT/NP2_Kernel), switched to [SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra) with KPM support retained.
+Fork of [MiguVT/NP2_Kernel](https://github.com/MiguVT/NP2_Kernel), switched to [SukiSU Nova](https://github.com/SukiSU-Nova/SukiSU-Nova) (formerly SukiSU-Ultra) with KPM support retained.
 
 > [!WARNING]
-> **KPM does not work in v3.3.0 (releases #23 and #24).** The SukiSU-Ultra v4.3.0 manager shows KPM and version overrides as "unsupported", and `ksud kpm` fails with `os error 95`. Root, SUSFS and modules work. v3.4.0 pins a SukiSU-Ultra `builtin` that matches the manager and the [SukiSU KernelPatch](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch) image. Release #27 is the first v3.4.0 build; KPM works there on a device.
+> **KPM does not work in v3.3.0 (releases #23 and #24).** The SukiSU Ultra v4.3.0 manager showed KPM and version overrides as "unsupported", and `ksud kpm` fails with `os error 95`. Root, SUSFS and modules work. v3.4.0 pins a SukiSU `builtin` that matches the manager and the [SukiSU KernelPatch](https://github.com/SukiSU-Nova/SukiSU_KernelPatch_patch) image. Release #27 is the first v3.4.0 build; KPM works there on a device.
 >
 > Parts of this fork (workflow changes, scripts, docs) were written with AI assistance. Review the code before use and flash at your own risk.
 
@@ -16,10 +16,10 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 
 ## Features
 
-- **[SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU-Ultra)**: Kernel-level root (KernelSU fork)
+- **[SukiSU Nova](https://github.com/SukiSU-Nova/SukiSU-Nova)**: Kernel-level root (KernelSU fork)
 - **[SUSFS](https://gitlab.com/simonpunk/susfs4ksu)**: Hide root from banking apps, games, and safety checks
 - **[BaseBandGuard](https://github.com/vc-teahouse/Baseband-guard)**: Prevent apps and modules from modifying critical files
-- **KPM Support**: KPM modules via [KernelPatch by SukiSU-Ultra](https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch). Not working in v3.3.0, see the warning above
+- **KPM Support**: KPM modules via [KernelPatch by SukiSU Nova](https://github.com/SukiSU-Nova/SukiSU_KernelPatch_patch). Not working in v3.3.0, see the warning above
 - **LZ4 1.10**: newer LZ4 library for zram and erofs, from [arter97's Nothing Phone 2 kernel](https://github.com/arter97/android_kernel_nothing_sm8475). See `SPEC.md` §R
 - **Lazy RCU** (on by default, `rcu_lazy` workflow input): the kernel batches deferred frees so idle CPUs wake less often. See `SPEC.md` §R
 - **Linux 5.10.270** (LineageOS build only): upstream LTS fixes from Google's `android12-5.10.270_r00` GKI release, merged onto LineageOS's 5.10.246 kernel. See `SPEC.md` §L
@@ -30,7 +30,7 @@ The [Releases](https://github.com/maxysoft/NP2_Kernel/releases) include builds c
 1. Download the Kernel zip variant you want from [Releases](https://github.com/maxysoft/NP2_Kernel/releases)
 2. Boot into recovery (TWRP / OrangeFox)
 3. Flash the zip → reboot
-4. Install the [SukiSU Ultra Manager](https://github.com/SukiSU-Ultra/SukiSU-Ultra/releases) version named in the release notes to manage root. A newer manager may not work with the kernel.
+4. Install the [SukiSU Nova manager v3.0.0](https://github.com/SukiSU-Nova/SukiSU-Nova/releases/tag/v3.0.0) (`arm64-v8a` APK) to manage root. A newer manager may not work with the kernel. The old SukiSU Ultra manager does not work with this kernel: uninstall it. The Nova manager is a separate app (`com.sukisu.nova`).
 
 > **Backup your stock boot image first.** Bootloader must be unlocked. Use at your own risk.
 
@@ -95,7 +95,7 @@ The workflow can build any GKI-based kernel — fork it for your own device/kern
 ## Credits
 
 - [MiguVT](https://github.com/MiguVT/NP2_Kernel) - Original NP2_Kernel workflow this fork is based on
-- [SukiSU-Ultra maintainers & contributors](https://github.com/SukiSU-Ultra/SukiSU-Ultra) - SukiSU-Ultra
+- [SukiSU Nova maintainers & contributors](https://github.com/SukiSU-Nova/SukiSU-Nova) - SukiSU Nova (formerly SukiSU-Ultra)
 - [simonpunk](https://gitlab.com/simonpunk/susfs4ksu) - SUSFS
 - [osm0sis](https://github.com/osm0sis/AnyKernel3) - AnyKernel3
 - [vc-teahouse & contributors](https://github.com/vc-teahouse/Baseband-guard) - BaseBandGuard
